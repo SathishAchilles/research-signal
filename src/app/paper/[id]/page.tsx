@@ -236,6 +236,8 @@ async function PaperView({ id }: { id: string }) {
                 arxivId={paper.arxivId}
                 figureUrl={gallery[0].url}
                 caption={gallery[0].caption}
+                title={paper.title}
+                priority
                 authors={paper.authors}
                 signalType={signalType}
                 width={LEAD_W}
@@ -251,6 +253,7 @@ async function PaperView({ id }: { id: string }) {
                       arxivId={paper.arxivId}
                       figureUrl={f.url}
                       caption={f.caption}
+                      title={paper.title}
                       authors={paper.authors}
                       signalType={signalType}
                       width={THUMB_W}

@@ -65,7 +65,7 @@ export function DomainSection({
       <h2 id={`${domain.slug}-heading`} className="border-t border-rule pt-4 font-heading text-xl font-medium tracking-tight">
         {domain.name}
       </h2>
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_15rem] lg:gap-x-6">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-3 lg:grid-cols-[minmax(0,1fr)_15rem] lg:gap-x-6">
         <div className="lg:col-start-1 lg:row-start-1">
           {introText ? <p className="max-w-prose text-base leading-[26px]">{introText}</p> : null}
           {domain.quiet ? (

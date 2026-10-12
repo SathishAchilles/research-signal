@@ -6,7 +6,7 @@ export function DomainChipsBar({ selection }: { selection: BriefSelection }) {
   return (
     <nav
       aria-label="Domains"
-      className="glass-base sticky top-[76px] z-20 -mx-4 flex items-center gap-2 overflow-x-auto px-4 py-2 print:static"
+      className="glass-base sticky top-[var(--nav-h,76px)] z-20 -mx-4 flex items-center gap-2 overflow-x-auto px-4 py-2 print:static"
     >
       {selection.domains.map((d) => {
         const count = (d.hero ? 1 : 0) + d.standard.length + d.compact.length;

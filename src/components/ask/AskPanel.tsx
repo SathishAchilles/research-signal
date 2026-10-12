@@ -5,7 +5,7 @@ import { DefaultChatTransport, type UIMessage } from "ai";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { PaperFigure } from "@/components/paper/PaperFigure";
+import { PaperFigure, figureAttribution, isServableFigure } from "@/components/paper/PaperFigure";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,6 +16,7 @@ import {
   TOKEN,
   fillEvidenceTokens,
 } from "@/lib/ask/answer";
+import type { SignalType } from "@/lib/pipeline/rank";
 import { cn } from "@/lib/utils";
 
 type AskMessage = UIMessage<AskMetadata>;
@@ -41,8 +42,15 @@ export const JOB_PROMPTS = [
 
 type Coverage = AskCoverage & { warning?: string };
 
-// A cited paper's lead figure, loaded by the page for the thumbnails in the citation list.
-export type CitedFigure = { figureUrl: string | null; caption: string | null };
+// A cited paper's lead figure, loaded by the page for the thumbnails in the citation list, with the
+// attribution fields and the signal type the glyph fallback draws.
+export type CitedFigure = {
+  figureUrl: string | null;
+  caption: string | null;
+  signalType: SignalType | null;
+  arxivId: string | null;
+  authors: string[];
+};
 export type CitedFigures = Record<string, CitedFigure>;
 
 const THUMB = 56;
@@ -238,16 +246,20 @@ function AnswerActions({ message, title }: { message: AskMessage; title: string 
 }
 
 // The answer's cited papers as rows with a 56px figure thumbnail. Papers with no figure (or not
-// loaded yet, while the answer streams) keep the same box with the fallback glyph.
+// loaded yet, while the answer streams) keep the same box with the signal-type glyph. The thumbnail
+// has no caption plate, so an image's attribution sits in the row's text column instead.
 function CitedPapers({ cites, figures }: { cites: AskCitation[]; figures: CitedFigures }) {
   if (cites.length === 0) return null;
   const sorted = [...cites].sort((a, b) => Number(a.ref.slice(1)) - Number(b.ref.slice(1)));
   return (
     <div className="flex flex-col gap-2 border-t border-border pt-3">
       <p className="micro">Cited papers</p>
-      <ol aria-label="Cited papers" className="grid gap-2 sm:grid-cols-2">
+      <ol aria-label="Cited papers" className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {sorted.map((c) => {
           const figure = figures[c.paperId];
+          const attribution = isServableFigure(figure?.figureUrl)
+            ? figureAttribution(figure.authors, figure.arxivId)
+            : null;
           return (
             <li key={c.ref}>
               <Link
@@ -256,11 +268,11 @@ function CitedPapers({ cites, figures }: { cites: AskCitation[]; figures: CitedF
               >
                 <PaperFigure
                   paperId={c.paperId}
-                  arxivId={null}
+                  arxivId={figure?.arxivId ?? null}
                   figureUrl={figure?.figureUrl ?? null}
                   caption={figure?.caption}
-                  authors={[]}
-                  signalType={null}
+                  authors={figure?.authors ?? []}
+                  signalType={figure?.signalType ?? null}
                   title={c.title}
                   width={THUMB}
                   height={THUMB}
@@ -274,6 +286,9 @@ function CitedPapers({ cites, figures }: { cites: AskCitation[]; figures: CitedF
                     {c.title}
                   </span>
                   {c.rung ? <span className="micro text-[10px]">{c.rung}</span> : null}
+                  {attribution ? (
+                    <span className="truncate font-mono text-[10.5px] tracking-[.02em] text-muted-foreground">{attribution}</span>
+                  ) : null}
                 </span>
               </Link>
             </li>
@@ -464,8 +479,10 @@ export function AskPanel({
         {error ? <p role="alert" className="text-sm text-destructive">{errorMessage(error)}</p> : null}
       </div>
 
+      {/* In flow, not sticky: a sticky composer rests over the thread's figures, and figures must
+          never sit under a backdrop-filter. */}
       <form
-        className="glass-base sticky bottom-4 z-10 flex flex-col gap-2 p-2"
+        className="glass-base flex flex-col gap-2 p-2"
         onSubmit={(e) => {
           e.preventDefault();
           ask(input);

@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { asc, inArray, sql } from "drizzle-orm";
+import { asc } from "drizzle-orm";
 import { db } from "@/db/client";
-import { domains, papers } from "@/db/schema";
+import { domains } from "@/db/schema";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { EvidenceMeter } from "@/components/brief/EvidenceMeter";
@@ -44,31 +44,16 @@ function queryString(filters: LogFilters): string {
 
 const RUNGS: readonly Rung[] = ["LAB", "CODE", "MODEL", "PEER"];
 const VERDICTS: readonly Verdict[] = ["CLIENT", "READ", "SKIP"];
+const SIGNAL_TYPES: readonly SignalType[] = ["BENCH", "EVAL", "REFRAME", "METHOD"];
 const isRung = (value: string | null): value is Rung => value !== null && (RUNGS as readonly string[]).includes(value);
 const isVerdict = (value: string | null): value is Verdict => value !== null && (VERDICTS as readonly string[]).includes(value);
+const isSignalType = (value: string | null): value is SignalType =>
+  value !== null && (SIGNAL_TYPES as readonly string[]).includes(value);
 
 // Filter pills: glass-chip capsules (no backdrop-filter) holding a micro label and a bare control.
 const PILL_CLASS =
   "glass-chip flex h-9 items-center gap-2 pl-3 pr-1.5 text-sm focus-within:border-(--glass-rim-top) has-focus-visible:outline-3 has-focus-visible:outline-solid has-focus-visible:outline-focus has-focus-visible:outline-offset-2";
 const CONTROL_CLASS = "h-8 min-w-0 rounded-full bg-transparent px-1.5 text-sm text-foreground outline-none [color-scheme:dark] placeholder:text-muted-foreground";
-
-type Thumb = { figureUrl: string | null; signalType: SignalType | null };
-
-// The 40px thumbnail column reads the lead figure plus the best-scored domain's signal type (the
-// same row the verdict column uses), so papers with no figure fall back to their signal glyph.
-async function loadThumbs(paperIds: string[]): Promise<Map<string, Thumb>> {
-  if (paperIds.length === 0) return new Map();
-  const rows = await db
-    .select({
-      id: papers.id,
-      figureUrl: papers.figureUrl,
-      signalType: sql<SignalType | null>`(select pd.signal_type::text from research_signal.paper_domain pd
-        where pd.paper_id = ${papers.id} order by pd.final_score desc nulls last limit 1)`,
-    })
-    .from(papers)
-    .where(inArray(papers.id, paperIds));
-  return new Map(rows.map((r) => [r.id, { figureUrl: r.figureUrl, signalType: r.signalType }]));
-}
 
 async function LogView({ searchParams }: Pick<PageProps<"/log">, "searchParams">) {
   const filters = parseLogFilters(await searchParams);
@@ -76,7 +61,6 @@ async function LogView({ searchParams }: Pick<PageProps<"/log">, "searchParams">
     listLog(filters),
     db.select({ id: domains.id, name: domains.name }).from(domains).orderBy(asc(domains.name)),
   ]);
-  const thumbs = await loadThumbs(rows.map((r) => r.paperId));
   const qs = queryString(filters);
 
   return (
@@ -153,7 +137,6 @@ async function LogView({ searchParams }: Pick<PageProps<"/log">, "searchParams">
             </thead>
             <tbody className="divide-y divide-border">
               {rows.map((r) => {
-                const thumb = thumbs.get(r.paperId);
                 const rung: Rung = isRung(r.rung) ? r.rung : "LAB";
                 return (
                   <tr key={r.paperId} className="align-top transition-colors hover:bg-plate-hover" data-log-row>
@@ -161,9 +144,9 @@ async function LogView({ searchParams }: Pick<PageProps<"/log">, "searchParams">
                       <PaperFigure
                         paperId={r.paperId}
                         arxivId={null}
-                        figureUrl={thumb?.figureUrl ?? null}
+                        figureUrl={r.figureUrl}
                         authors={[]}
-                        signalType={thumb?.signalType ?? null}
+                        signalType={isSignalType(r.signalType) ? r.signalType : null}
                         title={r.title}
                         width={40}
                         height={40}

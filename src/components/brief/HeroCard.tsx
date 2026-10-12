@@ -50,7 +50,7 @@ export function HeroCard({
         <CueRow card={card} />
       </div>
 
-      <div className="mt-4 grid gap-5 md:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
+      <div className="mt-4 grid grid-cols-[minmax(0,1fr)] gap-5 md:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
         <div className="flex min-w-0 flex-col gap-4">
           {prose?.lede ? <p className="text-[15px] leading-relaxed">{prose.lede}</p> : null}
           <div className="border-t border-rule/60 pt-3">

@@ -101,23 +101,25 @@ export function ConeChart({
           vectorEffect="non-scaling-stroke"
         />
       </svg>
-      <table className="sr-only">
-        <caption>{title}</caption>
-        <thead>
-          <tr>
-            <th scope="col">label</th>
-            <th scope="col">value ({unit})</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.map((d, i) => (
-            <tr key={`${d.label}-${i}`}>
-              <td>{d.label}</td>
-              <td>{d.display}</td>
+      <div className="sr-only">
+        <table>
+          <caption>{title}</caption>
+          <thead>
+            <tr>
+              <th scope="col">label</th>
+              <th scope="col">value ({unit})</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {data.map((d, i) => (
+              <tr key={`${d.label}-${i}`}>
+                <td>{d.label}</td>
+                <td>{d.display}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </figure>
   );
 }

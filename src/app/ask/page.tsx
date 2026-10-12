@@ -1,4 +1,4 @@
-import { asc, desc, eq, inArray } from "drizzle-orm";
+import { asc, desc, eq, inArray, sql } from "drizzle-orm";
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
@@ -6,6 +6,7 @@ import { z } from "zod";
 import { AskPanel, type CitedFigure } from "@/components/ask/AskPanel";
 import { db } from "@/db/client";
 import { askMessages, askThreads, papers } from "@/db/schema";
+import type { SignalType } from "@/lib/pipeline/rank";
 import { cn } from "@/lib/utils";
 
 const THREAD_LIMIT = 50;
@@ -60,12 +61,22 @@ async function AskView({ searchParams }: { searchParams: Promise<Record<string, 
   ]);
   const thread = active[0];
 
-  // Lead figures for the cited papers' thumbnails. A live answer gets its figures on the
-  // router.refresh() that follows its save.
+  // Lead figures for the cited papers' thumbnails, with the attribution fields and the best-scored
+  // domain's signal type (for the glyph fallback) in the same query. A live answer gets its figures
+  // on the router.refresh() that follows its save.
   const paperIds = thread ? citedPaperIds(saved) : [];
   const figureRows = paperIds.length
     ? await db
-        .select({ id: papers.id, figureUrl: papers.figureUrl, figures: papers.figures })
+        .select({
+          id: papers.id,
+          arxivId: papers.arxivId,
+          authors: papers.authors,
+          figureUrl: papers.figureUrl,
+          figures: papers.figures,
+          signalType: sql<SignalType | null>`(select pd.signal_type::text from research_signal.paper_domain pd
+            where pd.paper_id = ${papers.id} and pd.signal_type is not null
+            order by pd.final_score desc nulls last limit 1)`,
+        })
         .from(papers)
         .where(inArray(papers.id, paperIds))
     : [];
@@ -73,12 +84,13 @@ async function AskView({ searchParams }: { searchParams: Promise<Record<string, 
     figureRows.map((r) => {
       const figureUrl = r.figureUrl ?? r.figures?.[0]?.url ?? null;
       const caption = r.figures?.find((f) => f.url === figureUrl)?.caption ?? null;
-      return [r.id, { figureUrl, caption }];
+      // Two authors are enough for "Figure: <first author> et al.".
+      return [r.id, { figureUrl, caption, signalType: r.signalType, arxivId: r.arxivId, authors: r.authors.slice(0, 2) }];
     }),
   );
 
   return (
-    <div className="grid gap-6 md:grid-cols-[220px_1fr] md:items-start">
+    <div className="grid grid-cols-1 gap-6 md:grid-cols-[220px_minmax(0,1fr)] md:items-start">
       <nav aria-label="Threads" className="glass-base flex flex-col gap-1 p-3 text-sm md:sticky md:top-[76px] md:max-h-[calc(100dvh-6.5rem)] md:overflow-y-auto">
         <p className="micro px-2 pb-1">Threads</p>
         <Link

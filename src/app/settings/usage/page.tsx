@@ -116,7 +116,7 @@ async function Usage() {
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2">
         <section className="plate p-4">
           <ConeChart title="LLM cost this week by stage" unit="USD" data={weekByStage} />
         </section>

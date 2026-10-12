@@ -31,6 +31,13 @@ function subscribeGlass(onChange: () => void) {
 const readSolid = () => document.documentElement.dataset.glass === "off";
 const readSolidOnServer = () => false;
 
+const NAV_BOX = "mx-auto mt-3 w-[min(72rem,calc(100%-2rem))] print:hidden";
+
+// Suspense fallback for the nav: reserves the same 12px + 56px box so <main> does not shift when the nav streams in.
+export function GlassNavPlaceholder() {
+  return <div aria-hidden="true" className={cn(NAV_BOX, "h-14 shrink-0")} />;
+}
+
 export function GlassNav() {
   const pathname = usePathname();
   const solid = useSyncExternalStore(subscribeGlass, readSolid, readSolidOnServer);
@@ -60,21 +67,22 @@ export function GlassNav() {
   if (HIDDEN_ON.test(pathname)) return null;
 
   return (
-    <header className="sticky top-3 z-30 mx-auto mt-3 w-[min(72rem,calc(100%-2rem))] print:hidden">
+    <header className={cn(NAV_BOX, "sticky top-3 z-30")}>
       <nav aria-label="Primary" className="glass-nav flex h-14 items-center gap-1 px-3">
         <Link
           href="/"
           className="hidden shrink-0 items-center gap-2 rounded-full px-1.5 py-1 text-[var(--text)] sm:flex"
-          aria-label="Research Signal, latest brief"
         >
           <svg viewBox="0 0 24 24" className="size-6" aria-hidden="true" focusable="false">
             <circle cx="12" cy="12" r="9.5" fill="none" stroke="var(--signal)" strokeWidth="1.5" />
             <circle cx="12" cy="12" r="5.5" fill="none" stroke="var(--micro)" strokeWidth="1" strokeDasharray="2 2.4" />
             <circle cx="12" cy="12" r="2.4" fill="var(--signal)" />
           </svg>
-          <span className="micro hidden lg:inline">
+          {/* The visible wordmark is the start of the accessible name (WCAG 2.5.3); below lg it stays in the a11y tree. */}
+          <span className="micro sr-only lg:not-sr-only">
             Research<span className="text-[var(--signal)]">·</span>Signal
           </span>
+          <span className="sr-only">, latest brief</span>
         </Link>
 
         <ul
