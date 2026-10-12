@@ -1,0 +1,288 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2190" height="2130" viewBox="0 0 2190 2130" font-family="Helvetica, Arial, sans-serif">
+<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#3A3F45"/></marker><marker id="arrOrange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#C27420"/></marker></defs>
+<rect width="2190" height="2130" fill="#FFFFFF"/>
+<text x="20" y="48" font-size="30" font-weight="700" fill="#1F2328">research-signal · Weekly research brief components map</text>
+<text x="20" y="80" font-size="16" fill="#5B6470">Monday 07:00 IST brief by domain · Gemini via OpenRouter only (Google infra) · domains and sources editable without code · numbers computed in code, never by the LLM</text>
+<rect x="20" y="118" width="2040" height="46" fill="#2D3A45"/>
+<text x="120.0" y="148" font-size="18" font-weight="700" fill="#FFFFFF" text-anchor="middle">Lane</text>
+<text x="345.0" y="148" font-size="18" font-weight="700" fill="#FFFFFF" text-anchor="middle">Trigger</text>
+<text x="600.0" y="148" font-size="18" font-weight="700" fill="#FFFFFF" text-anchor="middle">Input</text>
+<text x="890.0" y="148" font-size="18" font-weight="700" fill="#FFFFFF" text-anchor="middle">Context</text>
+<text x="1225.0" y="148" font-size="18" font-weight="700" fill="#FFFFFF" text-anchor="middle">Processing</text>
+<text x="1550.0" y="148" font-size="18" font-weight="700" fill="#FFFFFF" text-anchor="middle">AI</text>
+<text x="1880.0" y="148" font-size="18" font-weight="700" fill="#FFFFFF" text-anchor="middle">Output</text>
+<rect x="220" y="164" width="1840" height="246" fill="#F5F7F9"/>
+<rect x="20" y="164" width="200" height="246" fill="#E1E6EB"/>
+<text x="120.0" y="285.0" font-size="17" font-weight="700" fill="#1F2328" text-anchor="middle">Kavita</text>
+<text x="120.0" y="305.0" font-size="13" fill="#5B6470" text-anchor="middle">consultant · 8-10 domains</text>
+<line x1="20" y1="164" x2="2060" y2="164" stroke="#D3D9DF"/>
+<rect x="220" y="410" width="1840" height="166" fill="#EDF0F3"/>
+<rect x="20" y="410" width="200" height="166" fill="#E1E6EB"/>
+<text x="120.0" y="491.0" font-size="17" font-weight="700" fill="#1F2328" text-anchor="middle">Vercel app</text>
+<text x="120.0" y="511.0" font-size="13" fill="#5B6470" text-anchor="middle">Next.js · PIN-gated</text>
+<line x1="20" y1="410" x2="2060" y2="410" stroke="#D3D9DF"/>
+<rect x="220" y="576" width="1840" height="246" fill="#F5F7F9"/>
+<rect x="20" y="576" width="200" height="246" fill="#E1E6EB"/>
+<text x="120.0" y="697.0" font-size="17" font-weight="700" fill="#1F2328" text-anchor="middle">Gemini</text>
+<text x="120.0" y="717.0" font-size="13" fill="#5B6470" text-anchor="middle">via OpenRouter · google/* only</text>
+<line x1="20" y1="576" x2="2060" y2="576" stroke="#D3D9DF"/>
+<rect x="220" y="822" width="1840" height="246" fill="#EDF0F3"/>
+<rect x="20" y="822" width="200" height="246" fill="#E1E6EB"/>
+<text x="120.0" y="943.0" font-size="17" font-weight="700" fill="#1F2328" text-anchor="middle">Supabase data</text>
+<text x="120.0" y="963.0" font-size="13" fill="#5B6470" text-anchor="middle">schema research_signal</text>
+<line x1="20" y1="822" x2="2060" y2="822" stroke="#D3D9DF"/>
+<rect x="220" y="1068" width="1840" height="324" fill="#F5F7F9"/>
+<rect x="20" y="1068" width="200" height="324" fill="#E1E6EB"/>
+<text x="120.0" y="1228.0" font-size="17" font-weight="700" fill="#1F2328" text-anchor="middle">Vercel stages</text>
+<text x="120.0" y="1248.0" font-size="13" fill="#5B6470" text-anchor="middle">/api/stage/* · ≤ 300 s</text>
+<line x1="20" y1="1068" x2="2060" y2="1068" stroke="#D3D9DF"/>
+<rect x="220" y="1392" width="1840" height="100" fill="#EDF0F3"/>
+<rect x="20" y="1392" width="200" height="100" fill="#E1E6EB"/>
+<text x="120.0" y="1440.0" font-size="17" font-weight="700" fill="#1F2328" text-anchor="middle">Supabase cron</text>
+<text x="120.0" y="1460.0" font-size="13" fill="#5B6470" text-anchor="middle">pg_cron + pg_net</text>
+<line x1="20" y1="1392" x2="2060" y2="1392" stroke="#D3D9DF"/>
+<rect x="220" y="1492" width="1840" height="262" fill="#F5F7F9"/>
+<rect x="20" y="1492" width="200" height="262" fill="#E1E6EB"/>
+<text x="120.0" y="1621.0" font-size="17" font-weight="700" fill="#1F2328" text-anchor="middle">Live sources</text>
+<text x="120.0" y="1641.0" font-size="13" fill="#5B6470" text-anchor="middle">public APIs · rate-limited</text>
+<line x1="20" y1="1492" x2="2060" y2="1492" stroke="#D3D9DF"/>
+<rect x="220" y="1754" width="1840" height="100" fill="#EDF0F3"/>
+<rect x="20" y="1754" width="200" height="100" fill="#E1E6EB"/>
+<text x="120.0" y="1802.0" font-size="17" font-weight="700" fill="#1F2328" text-anchor="middle">Resend</text>
+<text x="120.0" y="1822.0" font-size="13" fill="#5B6470" text-anchor="middle">email</text>
+<line x1="20" y1="1754" x2="2060" y2="1754" stroke="#D3D9DF"/>
+<line x1="470" y1="164" x2="470" y2="1854" stroke="#C9D0D6" stroke-dasharray="4 5"/>
+<line x1="730" y1="164" x2="730" y2="1854" stroke="#C9D0D6" stroke-dasharray="4 5"/>
+<line x1="1050" y1="164" x2="1050" y2="1854" stroke="#C9D0D6" stroke-dasharray="4 5"/>
+<line x1="1400" y1="164" x2="1400" y2="1854" stroke="#C9D0D6" stroke-dasharray="4 5"/>
+<line x1="1700" y1="164" x2="1700" y2="1854" stroke="#C9D0D6" stroke-dasharray="4 5"/>
+<rect x="20" y="118" width="2040" height="1736" fill="none" stroke="#C9D0D6"/>
+<path d="M445.0,215.0 L496.0,215.0" fill="none" stroke="#3A3F45" stroke-width="1.8" marker-end="url(#arr)"/>
+<path d="M704.0,205.0 L1550.0,205.0 L1550.0,432.0" fill="none" stroke="#3A3F45" stroke-width="1.8" marker-end="url(#arr)"/>
+<path d="M704.0,225.0 L1030.0,225.0 L1030.0,461.0 L1085.0,461.0" fill="none" stroke="#3A3F45" stroke-width="1.8" marker-end="url(#arr)"/>
+<path d="M1430.0,461.0 L1365.0,461.0" fill="none" stroke="#3A3F45" stroke-width="1.8" marker-end="url(#arr)"/>
+<path d="M1225.0,490.0 L1225.0,504.0 L1042.0,504.0 L1042.0,1029.0 L1018.0,1029.0" fill="none" stroke="#3A3F45" stroke-width="1.8" marker-end="url(#arr)"/>
+<path d="M1630.0,432.0 L1630.0,293.0 L1736.0,293.0" fill="none" stroke="#3A3F45" stroke-width="1.8" marker-end="url(#arr)"/>
+<path d="M1610.0,490.0 L1610.0,504.0 L1718.0,504.0 L1718.0,1503.0 L740.0,1503.0 L740.0,1607.0 L704.0,1607.0" fill="none" stroke="#3A3F45" stroke-width="1.8" stroke-dasharray="6 5" marker-end="url(#arr)"/>
+<path d="M445.0,293.0 L1054.0,293.0 L1054.0,937.0 L1085.0,937.0" fill="none" stroke="#3A3F45" stroke-width="1.8" marker-end="url(#arr)"/>
+<path d="M345.0,400.0 L345.0,873.0 L762.0,873.0" fill="none" stroke="#3A3F45" stroke-width="1.8" marker-end="url(#arr)"/>
+<path d="M1365.0,951.0 L1694.0,951.0 L1694.0,371.0 L1736.0,371.0" fill="none" stroke="#3A3F45" stroke-width="1.8" marker-end="url(#arr)"/>
+<path d="M1225.0,922.0 L1225.0,873.0 L1018.0,873.0" fill="none" stroke="#3A3F45" stroke-width="1.8" stroke-dasharray="6 5" marker-end="url(#arr)"/>
+<path d="M1365.0,965.0 L1706.0,965.0 L1706.0,539.0 L1736.0,539.0" fill="none" stroke="#3A3F45" stroke-width="1.8" stroke-dasharray="6 5" marker-end="url(#arr)"/>
+<path d="M445.0,1442.0 L481.0,1442.0 L481.0,1105.0 L1085.0,1105.0" fill="none" stroke="#3A3F45" stroke-width="1.8" marker-end="url(#arr)"/>
+<path d="M445.0,1197.0 L469.0,1197.0 L469.0,1119.0 L1085.0,1119.0" fill="none" stroke="#3A3F45" stroke-width="1.8" stroke-dasharray="6 5" marker-end="url(#arr)"/>
+<path d="M600.0,1514.0 L600.0,1133.0 L1085.0,1133.0" fill="none" stroke="#3A3F45" stroke-width="1.8" marker-end="url(#arr)"/>
+<path d="M704.0,1621.0 L728.0,1621.0 L728.0,1079.0 L1165.0,1079.0 L1165.0,1090.0" fill="none" stroke="#3A3F45" stroke-width="1.8" marker-end="url(#arr)"/>
+<path d="M704.0,1635.0 L716.0,1635.0 L716.0,1745.0 L1066.0,1745.0 L1066.0,1289.0 L1085.0,1289.0" fill="none" stroke="#3A3F45" stroke-width="1.8" marker-end="url(#arr)"/>
+<path d="M1018.0,1543.0 L1030.0,1543.0 L1030.0,1261.0 L1085.0,1261.0" fill="none" stroke="#3A3F45" stroke-width="1.8" marker-end="url(#arr)"/>
+<path d="M1018.0,1621.0 L1042.0,1621.0 L1042.0,1275.0 L1085.0,1275.0" fill="none" stroke="#3A3F45" stroke-width="1.8" marker-end="url(#arr)"/>
+<path d="M1018.0,1699.0 L1054.0,1699.0 L1054.0,1367.0 L1085.0,1367.0" fill="none" stroke="#3A3F45" stroke-width="1.8" marker-end="url(#arr)"/>
+<path d="M496.0,1699.0 L457.0,1699.0 L457.0,1339.0 L1085.0,1339.0" fill="none" stroke="#3A3F45" stroke-width="1.8" marker-end="url(#arr)"/>
+<path d="M345.0,1413.0 L345.0,1353.0 L1085.0,1353.0" fill="none" stroke="#3A3F45" stroke-width="1.8" marker-end="url(#arr)"/>
+<path d="M1365.0,1119.0 L1377.0,1119.0 L1377.0,637.0 L1430.0,637.0" fill="none" stroke="#3A3F45" stroke-width="1.8" marker-end="url(#arr)"/>
+<path d="M890.0,844.0 L890.0,617.0 L1430.0,617.0" fill="none" stroke="#3A3F45" stroke-width="1.8" stroke-dasharray="6 5" marker-end="url(#arr)"/>
+<path d="M1550.0,656.0 L1550.0,676.0" fill="none" stroke="#3A3F45" stroke-width="1.8" marker-end="url(#arr)"/>
+<path d="M1430.0,705.0 L1389.0,705.0 L1389.0,1185.0 L1365.0,1185.0" fill="none" stroke="#3A3F45" stroke-width="1.8" marker-end="url(#arr)"/>
+<path d="M1225.0,1226.0 L1225.0,1246.0" fill="none" stroke="#3A3F45" stroke-width="1.8" marker-end="url(#arr)"/>
+<path d="M1365.0,1275.0 L1401.0,1275.0 L1401.0,1209.0 L1365.0,1209.0" fill="none" stroke="#3A3F45" stroke-width="1.8" stroke-dasharray="6 5" marker-end="url(#arr)"/>
+<path d="M1365.0,1339.0 L1413.0,1339.0 L1413.0,783.0 L1430.0,783.0" fill="none" stroke="#3A3F45" stroke-width="1.8" marker-end="url(#arr)"/>
+<path d="M1550.0,812.0 L1550.0,1353.0 L1365.0,1353.0" fill="none" stroke="#3A3F45" stroke-width="1.8" stroke-dasharray="6 5" marker-end="url(#arr)"/>
+<path d="M1365.0,1367.0 L1706.0,1367.0 L1706.0,1804.0 L1736.0,1804.0" fill="none" stroke="#3A3F45" stroke-width="1.8" marker-end="url(#arr)"/>
+<path d="M1365.0,1379.0 L1730.0,1379.0 L1730.0,477.0 L1736.0,477.0" fill="none" stroke="#3A3F45" stroke-width="1.8" marker-end="url(#arr)"/>
+<path d="M1085.0,1197.0 L1078.0,1197.0 L1078.0,965.0 L1018.0,965.0" fill="none" stroke="#3A3F45" stroke-width="1.8" marker-end="url(#arr)"/>
+<path d="M890.0,980.0 L890.0,1000.0" fill="none" stroke="#3A3F45" stroke-width="1.8" marker-end="url(#arr)"/>
+<path d="M1365.0,1289.0 L1694.0,1289.0 L1694.0,1621.0 L1736.0,1621.0" fill="none" stroke="#C27420" stroke-width="1.8" stroke-dasharray="6 5" marker-end="url(#arrOrange)"/>
+<path d="M1670.0,783.0 L1736.0,783.0" fill="none" stroke="#C27420" stroke-width="1.8" stroke-dasharray="6 5" marker-end="url(#arrOrange)"/>
+<path d="M2024.0,1804.0 L2078.0,1804.0 L2078.0,225.0 L2024.0,225.0" fill="none" stroke="#3A3F45" stroke-width="1.8" stroke-dasharray="6 5" marker-end="url(#arr)"/>
+<path d="M2024.0,461.0 L2104.0,461.0 L2104.0,205.0 L2024.0,205.0" fill="none" stroke="#3A3F45" stroke-width="1.8" stroke-dasharray="6 5" marker-end="url(#arr)"/>
+<rect x="245.0" y="186.0" width="200.0" height="58" rx="8" fill="#FFFFFF" stroke="#5B6470" stroke-width="1.6"/>
+<text x="345.0" y="210.0" font-size="15.5" font-weight="700" fill="#1F2328" text-anchor="middle">Search / Ask (Cmd-K)</text>
+<text x="345.0" y="230.0" font-size="12.5" fill="#5B6470" text-anchor="middle">keyword · term · question</text>
+<rect x="245.0" y="264.0" width="200.0" height="58" rx="8" fill="#FFFFFF" stroke="#5B6470" stroke-width="1.6"/>
+<text x="345.0" y="288.0" font-size="15.5" font-weight="700" fill="#1F2328" text-anchor="middle">Read · Client · Skip</text>
+<text x="345.0" y="308.0" font-size="12.5" fill="#5B6470" text-anchor="middle">one click, email or web</text>
+<rect x="245.0" y="342.0" width="200.0" height="58" rx="8" fill="#FFFFFF" stroke="#5B6470" stroke-width="1.6"/>
+<text x="345.0" y="366.0" font-size="15.5" font-weight="700" fill="#1F2328" text-anchor="middle">Edits Settings</text>
+<text x="345.0" y="386.0" font-size="12.5" fill="#5B6470" text-anchor="middle">domains · sources · delivery</text>
+<rect x="496.0" y="186.0" width="208.0" height="58" rx="8" fill="#FFFFFF" stroke="#5B6470" stroke-width="1.6"/>
+<text x="600.0" y="210.0" font-size="15.5" font-weight="700" fill="#1F2328" text-anchor="middle">6-digit PIN</text>
+<text x="600.0" y="230.0" font-size="12.5" fill="#5B6470" text-anchor="middle">argon2id · per-IP backoff</text>
+<rect x="762.0" y="342.0" width="256.0" height="58" rx="8" fill="#FDECEC" stroke="#C0392B" stroke-width="2.2" stroke-dasharray="7 4"/>
+<text x="890.0" y="366.0" font-size="15.5" font-weight="700" fill="#7B1D14" text-anchor="middle">CUT: real-time alerts</text>
+<text x="890.0" y="386.0" font-size="12.5" fill="#C0392B" text-anchor="middle">weekly brief + on-demand Ask</text>
+<rect x="1736.0" y="186.0" width="288.0" height="58" rx="8" fill="#E4F4EC" stroke="#2E8B62" stroke-width="1.6"/>
+<text x="1880.0" y="210.0" font-size="15.5" font-weight="700" fill="#14523A" text-anchor="middle">Reads the Monday brief</text>
+<text x="1880.0" y="230.0" font-size="12.5" fill="#2E8B62" text-anchor="middle">07:00 IST · by domain · &lt; 10 min</text>
+<rect x="1736.0" y="264.0" width="288.0" height="58" rx="8" fill="#E4F4EC" stroke="#2E8B62" stroke-width="1.6"/>
+<text x="1880.0" y="288.0" font-size="15.5" font-weight="700" fill="#14523A" text-anchor="middle">Cited client answer</text>
+<text x="1880.0" y="308.0" font-size="12.5" fill="#2E8B62" text-anchor="middle">6 intents · High / Med / Low</text>
+<rect x="1736.0" y="342.0" width="288.0" height="58" rx="8" fill="#E4F4EC" stroke="#2E8B62" stroke-width="1.6"/>
+<text x="1880.0" y="366.0" font-size="15.5" font-weight="700" fill="#14523A" text-anchor="middle">Notable log · CSV</text>
+<text x="1880.0" y="386.0" font-size="12.5" fill="#2E8B62" text-anchor="middle">client tags · notes · for the deck</text>
+<rect x="1085.0" y="432.0" width="280.0" height="58" rx="8" fill="#FFFFFF" stroke="#5B6470" stroke-width="1.6"/>
+<text x="1225.0" y="456.0" font-size="15.5" font-weight="700" fill="#1F2328" text-anchor="middle">Hybrid search</text>
+<text x="1225.0" y="476.0" font-size="12.5" fill="#5B6470" text-anchor="middle">FTS + vector (RRF) · facets · presets</text>
+<rect x="1430.0" y="432.0" width="240.0" height="58" rx="8" fill="#EEEAFB" stroke="#5B4BB7" stroke-width="1.6"/>
+<text x="1550.0" y="456.0" font-size="15.5" font-weight="700" fill="#2B1E73" text-anchor="middle">Ask agent</text>
+<text x="1550.0" y="476.0" font-size="12.5" fill="#5B4BB7" text-anchor="middle">route → 7 tools → grade → cite</text>
+<rect x="1736.0" y="432.0" width="288.0" height="58" rx="8" fill="#E4F4EC" stroke="#2E8B62" stroke-width="1.6"/>
+<text x="1880.0" y="456.0" font-size="15.5" font-weight="700" fill="#14523A" text-anchor="middle">Web brief + archive</text>
+<text x="1880.0" y="476.0" font-size="12.5" fill="#2E8B62" text-anchor="middle">hero · standard · compact · j/k</text>
+<rect x="1736.0" y="510.0" width="288.0" height="58" rx="8" fill="#E4F4EC" stroke="#2E8B62" stroke-width="1.6"/>
+<text x="1880.0" y="534.0" font-size="15.5" font-weight="700" fill="#14523A" text-anchor="middle">Settings: health + cost</text>
+<text x="1880.0" y="554.0" font-size="12.5" fill="#2E8B62" text-anchor="middle">sources · scheduler · spend</text>
+<rect x="1430.0" y="598.0" width="240.0" height="58" rx="8" fill="#EEEAFB" stroke="#5B4BB7" stroke-width="1.6"/>
+<text x="1550.0" y="622.0" font-size="15.5" font-weight="700" fill="#2B1E73" text-anchor="middle">Embed 2-pass · 768d</text>
+<text x="1550.0" y="642.0" font-size="12.5" fill="#5B4BB7" text-anchor="middle">title+1st sentence → abstract</text>
+<rect x="1430.0" y="676.0" width="240.0" height="58" rx="8" fill="#EEEAFB" stroke="#5B4BB7" stroke-width="1.6"/>
+<text x="1550.0" y="700.0" font-size="15.5" font-weight="700" fill="#2B1E73" text-anchor="middle">Score 25 papers / call</text>
+<text x="1550.0" y="720.0" font-size="12.5" fill="#5B4BB7" text-anchor="middle">signal type · novelty · client angle</text>
+<rect x="1430.0" y="754.0" width="240.0" height="58" rx="8" fill="#EEEAFB" stroke="#5B4BB7" stroke-width="1.6"/>
+<text x="1550.0" y="778.0" font-size="15.5" font-weight="700" fill="#2B1E73" text-anchor="middle">Rerank 15 + compose</text>
+<text x="1550.0" y="798.0" font-size="12.5" fill="#5B4BB7" text-anchor="middle">Sun · BLUF · S-C-I · Smart Brevity</text>
+<rect x="1736.0" y="754.0" width="288.0" height="58" rx="8" fill="#FCEBD8" stroke="#C27420" stroke-width="1.6"/>
+<text x="1880.0" y="778.0" font-size="15.5" font-weight="700" fill="#6E3D08" text-anchor="middle">Credits out (402)</text>
+<text x="1880.0" y="798.0" font-size="12.5" fill="#C27420" text-anchor="middle">template text · flagged red</text>
+<rect x="762.0" y="844.0" width="256.0" height="58" rx="8" fill="#FFFFFF" stroke="#5B6470" stroke-width="1.6"/>
+<text x="890.0" y="868.0" font-size="15.5" font-weight="700" fill="#1F2328" text-anchor="middle">Domains + sources</text>
+<text x="890.0" y="888.0" font-size="12.5" fill="#5B6470" text-anchor="middle">editable · keys in Vault</text>
+<rect x="762.0" y="922.0" width="256.0" height="58" rx="8" fill="#FFFFFF" stroke="#5B6470" stroke-width="1.6"/>
+<text x="890.0" y="946.0" font-size="15.5" font-weight="700" fill="#1F2328" text-anchor="middle">Papers · signals · evidence</text>
+<text x="890.0" y="966.0" font-size="12.5" fill="#5B6470" text-anchor="middle">rung LAB → PEER · rising</text>
+<rect x="762.0" y="1000.0" width="256.0" height="58" rx="8" fill="#FFFFFF" stroke="#5B6470" stroke-width="1.6"/>
+<text x="890.0" y="1024.0" font-size="15.5" font-weight="700" fill="#1F2328" text-anchor="middle">search_docs index</text>
+<text x="890.0" y="1044.0" font-size="12.5" fill="#5B6470" text-anchor="middle">FTS + halfvec(768) HNSW</text>
+<rect x="1085.0" y="922.0" width="280.0" height="58" rx="8" fill="#FFFFFF" stroke="#5B6470" stroke-width="1.6"/>
+<text x="1225.0" y="946.0" font-size="15.5" font-weight="700" fill="#1F2328" text-anchor="middle">Actions + cost log</text>
+<text x="1225.0" y="966.0" font-size="12.5" fill="#5B6470" text-anchor="middle">notable log · llm_calls · runs</text>
+<rect x="245.0" y="1168.0" width="200.0" height="58" rx="8" fill="#FFFFFF" stroke="#5B6470" stroke-width="1.6"/>
+<text x="345.0" y="1192.0" font-size="15.5" font-weight="700" fill="#1F2328" text-anchor="middle">Vercel Cron heartbeat</text>
+<text x="345.0" y="1212.0" font-size="12.5" fill="#5B6470" text-anchor="middle">if idle 26 h · flags stale</text>
+<rect x="1085.0" y="1090.0" width="280.0" height="58" rx="8" fill="#FFFFFF" stroke="#5B6470" stroke-width="1.6"/>
+<text x="1225.0" y="1114.0" font-size="15.5" font-weight="700" fill="#1F2328" text-anchor="middle">ingest → job queue</text>
+<text x="1225.0" y="1134.0" font-size="12.5" fill="#5B6470" text-anchor="middle">upsert · dedupe · arXiv lease</text>
+<rect x="1085.0" y="1168.0" width="280.0" height="58" rx="8" fill="#FFFFFF" stroke="#5B6470" stroke-width="1.6"/>
+<text x="1225.0" y="1192.0" font-size="15.5" font-weight="700" fill="#1F2328" text-anchor="middle">rank (code) → finalists</text>
+<text x="1225.0" y="1212.0" font-size="12.5" fill="#5B6470" text-anchor="middle">Flash scores + signals · top 10</text>
+<rect x="1085.0" y="1246.0" width="280.0" height="58" rx="8" fill="#FFFFFF" stroke="#5B6470" stroke-width="1.6"/>
+<text x="1225.0" y="1270.0" font-size="15.5" font-weight="700" fill="#1F2328" text-anchor="middle">enrich finalists</text>
+<text x="1225.0" y="1290.0" font-size="12.5" fill="#5B6470" text-anchor="middle">signals rows · then re-rank</text>
+<rect x="1085.0" y="1324.0" width="280.0" height="58" rx="8" fill="#FFFFFF" stroke="#5B6470" stroke-width="1.6"/>
+<text x="1225.0" y="1348.0" font-size="15.5" font-weight="700" fill="#1F2328" text-anchor="middle">weekly: select · validate</text>
+<text x="1225.0" y="1368.0" font-size="12.5" fill="#5B6470" text-anchor="middle">tiers · tokens · caps · &lt; 90 KB</text>
+<rect x="245.0" y="1413.0" width="200.0" height="58" rx="8" fill="#FFFFFF" stroke="#5B6470" stroke-width="1.6"/>
+<text x="345.0" y="1437.0" font-size="15.5" font-weight="700" fill="#1F2328" text-anchor="middle">pg_cron: 6 rs_* jobs</text>
+<text x="345.0" y="1457.0" font-size="12.5" fill="#5B6470" text-anchor="middle">ingest·drain·hf·weekly·retention</text>
+<rect x="496.0" y="1514.0" width="208.0" height="58" rx="8" fill="#FFFFFF" stroke="#5B6470" stroke-width="1.6"/>
+<text x="600.0" y="1538.0" font-size="15.5" font-weight="700" fill="#1F2328" text-anchor="middle">arXiv RSS + API</text>
+<text x="600.0" y="1558.0" font-size="12.5" fill="#5B6470" text-anchor="middle">new + cross · 1 req / 3 s</text>
+<rect x="496.0" y="1592.0" width="208.0" height="58" rx="8" fill="#FFFFFF" stroke="#5B6470" stroke-width="1.6"/>
+<text x="600.0" y="1616.0" font-size="15.5" font-weight="700" fill="#1F2328" text-anchor="middle">Hugging Face Papers</text>
+<text x="600.0" y="1636.0" font-size="12.5" fill="#5B6470" text-anchor="middle">upvotes · code · models</text>
+<rect x="496.0" y="1670.0" width="208.0" height="58" rx="8" fill="#FFFFFF" stroke="#5B6470" stroke-width="1.6"/>
+<text x="600.0" y="1694.0" font-size="15.5" font-weight="700" fill="#1F2328" text-anchor="middle">ACL · CVF · PMLR</text>
+<text x="600.0" y="1714.0" font-size="12.5" fill="#5B6470" text-anchor="middle">weekly diff · venue = PEER</text>
+<rect x="762.0" y="1514.0" width="256.0" height="58" rx="8" fill="#FFFFFF" stroke="#5B6470" stroke-width="1.6"/>
+<text x="890.0" y="1538.0" font-size="15.5" font-weight="700" fill="#1F2328" text-anchor="middle">OpenReview</text>
+<text x="890.0" y="1558.0" font-size="12.5" fill="#5B6470" text-anchor="middle">title match · best-effort</text>
+<rect x="762.0" y="1592.0" width="256.0" height="58" rx="8" fill="#FFFFFF" stroke="#5B6470" stroke-width="1.6"/>
+<text x="890.0" y="1616.0" font-size="15.5" font-weight="700" fill="#1F2328" text-anchor="middle">Semantic Scholar</text>
+<text x="890.0" y="1636.0" font-size="12.5" fill="#5B6470" text-anchor="middle">keyless batch · builds-on</text>
+<rect x="762.0" y="1670.0" width="256.0" height="58" rx="8" fill="#FFFFFF" stroke="#5B6470" stroke-width="1.6"/>
+<text x="890.0" y="1694.0" font-size="15.5" font-weight="700" fill="#1F2328" text-anchor="middle">Full text</text>
+<text x="890.0" y="1714.0" font-size="12.5" fill="#5B6470" text-anchor="middle">arXiv HTML · Unpaywall · CORE off</text>
+<rect x="1430.0" y="1592.0" width="240.0" height="58" rx="8" fill="#FDECEC" stroke="#C0392B" stroke-width="2.2" stroke-dasharray="7 4"/>
+<text x="1550.0" y="1616.0" font-size="15.5" font-weight="700" fill="#7B1D14" text-anchor="middle">CUT: OpenAlex</text>
+<text x="1550.0" y="1636.0" font-size="12.5" fill="#C0392B" text-anchor="middle">wrong works for arXiv DOIs</text>
+<rect x="1736.0" y="1592.0" width="288.0" height="58" rx="8" fill="#FCEBD8" stroke="#C27420" stroke-width="1.6"/>
+<text x="1880.0" y="1616.0" font-size="15.5" font-weight="700" fill="#6E3D08" text-anchor="middle">Source down → footer</text>
+<text x="1880.0" y="1636.0" font-size="12.5" fill="#C27420" text-anchor="middle">ingest/enrich fail · still sends</text>
+<rect x="1736.0" y="1775.0" width="288.0" height="58" rx="8" fill="#E4F4EC" stroke="#2E8B62" stroke-width="1.6"/>
+<text x="1880.0" y="1799.0" font-size="15.5" font-weight="700" fill="#14523A" text-anchor="middle">Email, Mon 07:00 IST</text>
+<text x="1880.0" y="1819.0" font-size="12.5" fill="#2E8B62" text-anchor="middle">scheduledAt · to Resend owner</text>
+<rect x="1243.2" y="195.0" width="33.6" height="19" rx="4" fill="#FFFFFF" stroke="#D3D9DF" stroke-width="0.8"/>
+<text x="1260.0" y="209.0" font-size="12.5" font-weight="600" fill="#3A3F45" text-anchor="middle">ask</text>
+<rect x="852.4" y="215.0" width="55.2" height="19" rx="4" fill="#FFFFFF" stroke="#D3D9DF" stroke-width="0.8"/>
+<text x="880.0" y="229.0" font-size="12.5" font-weight="600" fill="#3A3F45" text-anchor="middle">search</text>
+<rect x="1373.5" y="451.0" width="48.0" height="19" rx="4" fill="#FFFFFF" stroke="#D3D9DF" stroke-width="0.8"/>
+<text x="1397.5" y="465.0" font-size="12.5" font-weight="600" fill="#3A3F45" text-anchor="middle">tools</text>
+<rect x="1120.8" y="494.0" width="98.4" height="19" rx="4" fill="#FFFFFF" stroke="#D3D9DF" stroke-width="0.8"/>
+<text x="1170.0" y="508.0" font-size="12.5" font-weight="600" fill="#3A3F45" text-anchor="middle">hybrid query</text>
+<rect x="1606.0" y="363.0" width="48.0" height="19" rx="4" fill="#FFFFFF" stroke="#D3D9DF" stroke-width="0.8"/>
+<text x="1630.0" y="377.0" font-size="12.5" font-weight="600" fill="#3A3F45" text-anchor="middle">cited</text>
+<rect x="1136.0" y="1493.0" width="228.0" height="19" rx="4" fill="#FFFFFF" stroke="#D3D9DF" stroke-width="0.8"/>
+<text x="1250.0" y="1507.0" font-size="12.5" font-weight="600" fill="#3A3F45" text-anchor="middle">live_search: Hugging Face only</text>
+<rect x="493.2" y="283.0" width="213.6" height="19" rx="4" fill="#FFFFFF" stroke="#D3D9DF" stroke-width="0.8"/>
+<text x="600.0" y="297.0" font-size="12.5" font-weight="600" fill="#3A3F45" text-anchor="middle">actions · signed email links</text>
+<rect x="274.2" y="684.0" width="141.6" height="19" rx="4" fill="#FFFFFF" stroke="#D3D9DF" stroke-width="0.8"/>
+<text x="345.0" y="698.0" font-size="12.5" font-weight="600" fill="#3A3F45" text-anchor="middle">edits, no redeploy</text>
+<rect x="1157.8" y="863.0" width="134.4" height="19" rx="4" fill="#FFFFFF" stroke="#D3D9DF" stroke-width="0.8"/>
+<text x="1225.0" y="877.0" font-size="12.5" font-weight="600" fill="#3A3F45" text-anchor="middle">CLIENT flags tune</text>
+<rect x="768.0" y="1095.0" width="264.0" height="19" rx="4" fill="#FFFFFF" stroke="#D3D9DF" stroke-width="0.8"/>
+<text x="900.0" y="1109.0" font-size="12.5" font-weight="600" fill="#3A3F45" text-anchor="middle">rs_ingest 08:00 · drain every 3 min</text>
+<rect x="487.2" y="1109.0" width="105.6" height="19" rx="4" fill="#FFFFFF" stroke="#D3D9DF" stroke-width="0.8"/>
+<text x="540.0" y="1123.0" font-size="12.5" font-weight="600" fill="#3A3F45" text-anchor="middle">drain if idle</text>
+<rect x="554.4" y="1432.0" width="91.2" height="19" rx="4" fill="#FFFFFF" stroke="#D3D9DF" stroke-width="0.8"/>
+<text x="600.0" y="1446.0" font-size="12.5" font-weight="600" fill="#3A3F45" text-anchor="middle">new + cross</text>
+<rect x="829.2" y="1069.0" width="141.6" height="19" rx="4" fill="#FFFFFF" stroke="#D3D9DF" stroke-width="0.8"/>
+<text x="900.0" y="1083.0" font-size="12.5" font-weight="600" fill="#3A3F45" text-anchor="middle">HF daily × 3 dates</text>
+<rect x="818.4" y="1735.0" width="163.2" height="19" rx="4" fill="#FFFFFF" stroke="#D3D9DF" stroke-width="0.8"/>
+<text x="900.0" y="1749.0" font-size="12.5" font-weight="600" fill="#3A3F45" text-anchor="middle">HF detail (shortlist)</text>
+<rect x="825.6" y="1329.0" width="148.8" height="19" rx="4" fill="#FFFFFF" stroke="#D3D9DF" stroke-width="0.8"/>
+<text x="900.0" y="1343.0" font-size="12.5" font-weight="600" fill="#3A3F45" text-anchor="middle">venue papers · PEER</text>
+<rect x="556.8" y="1343.0" width="206.4" height="19" rx="4" fill="#FFFFFF" stroke="#D3D9DF" stroke-width="0.8"/>
+<text x="660.0" y="1357.0" font-size="12.5" font-weight="600" fill="#3A3F45" text-anchor="middle">rs_weekly Sun 17:30 · retry</text>
+<rect x="1191.6" y="607.0" width="76.8" height="19" rx="4" fill="#FFFFFF" stroke="#D3D9DF" stroke-width="0.8"/>
+<text x="1230.0" y="621.0" font-size="12.5" font-weight="600" fill="#3A3F45" text-anchor="middle">centroids</text>
+<rect x="1562.0" y="656.0" width="120.0" height="19" rx="4" fill="#FFFFFF" stroke="#D3D9DF" stroke-width="0.8"/>
+<text x="1622.0" y="670.0" font-size="12.5" font-weight="600" fill="#3A3F45" text-anchor="middle">top 40 / domain</text>
+<rect x="1526.0" y="1011.0" width="48.0" height="19" rx="4" fill="#FFFFFF" stroke="#D3D9DF" stroke-width="0.8"/>
+<text x="1550.0" y="1025.0" font-size="12.5" font-weight="600" fill="#3A3F45" text-anchor="middle">prose</text>
+<rect x="1384.0" y="1357.0" width="156.0" height="19" rx="4" fill="#FFFFFF" stroke="#D3D9DF" stroke-width="0.8"/>
+<text x="1462.0" y="1371.0" font-size="12.5" font-weight="600" fill="#3A3F45" text-anchor="middle">render · scheduledAt</text>
+<rect x="1570.8" y="1369.0" width="62.4" height="19" rx="4" fill="#FFFFFF" stroke="#D3D9DF" stroke-width="0.8"/>
+<text x="1602.0" y="1383.0" font-size="12.5" font-weight="600" fill="#3A3F45" text-anchor="middle">publish</text>
+<rect x="1056.4" y="1025.0" width="55.2" height="19" rx="4" fill="#FFFFFF" stroke="#D3D9DF" stroke-width="0.8"/>
+<text x="1084.0" y="1039.0" font-size="12.5" font-weight="600" fill="#3A3F45" text-anchor="middle">writes</text>
+<rect x="920.8" y="980.0" width="62.4" height="19" rx="4" fill="#FFFFFF" stroke="#D3D9DF" stroke-width="0.8"/>
+<text x="952.0" y="994.0" font-size="12.5" font-weight="600" fill="#3A3F45" text-anchor="middle">indexed</text>
+<rect x="1514.4" y="1279.0" width="91.2" height="19" rx="4" fill="#FFFFFF" stroke="#D3D9DF" stroke-width="0.8"/>
+<text x="1560.0" y="1293.0" font-size="12.5" font-weight="600" fill="#C27420" text-anchor="middle">source down</text>
+<rect x="2025.2" y="872.0" width="105.6" height="19" rx="4" fill="#FFFFFF" stroke="#D3D9DF" stroke-width="0.8"/>
+<text x="2078.0" y="886.0" font-size="12.5" font-weight="600" fill="#3A3F45" text-anchor="middle">Mon 07:00 IST</text>
+<rect x="2087.2" y="283.0" width="33.6" height="19" rx="4" fill="#FFFFFF" stroke="#D3D9DF" stroke-width="0.8"/>
+<text x="2104.0" y="297.0" font-size="12.5" font-weight="600" fill="#3A3F45" text-anchor="middle">web</text>
+<rect x="20" y="1876" width="2040" height="70" fill="#F7F4EF" stroke="#D8D1C4"/>
+<text x="120.0" y="1908" font-size="17" font-weight="700" fill="#3D372C" text-anchor="middle">GitHub</text>
+<text x="120.0" y="1928" font-size="13" fill="#5B6470" text-anchor="middle">build only, not runtime</text>
+<rect x="255" y="1890" width="380" height="42" rx="8" fill="#EFEBE3" stroke="#8A8170"/>
+<text x="445" y="1916" font-size="14" font-weight="600" fill="#3D372C" text-anchor="middle">Code · prompts · OpenSpec plan</text>
+<path d="M635,1911 L712,1911" stroke="#8A8170" stroke-width="1.8" marker-end="url(#arr)"/>
+<rect x="712" y="1890" width="380" height="42" rx="8" fill="#EFEBE3" stroke="#8A8170"/>
+<text x="902" y="1916" font-size="14" font-weight="600" fill="#3D372C" text-anchor="middle">SQL 001-004 · schema + RLS</text>
+<path d="M1092,1911 L1169,1911" stroke="#8A8170" stroke-width="1.8" marker-end="url(#arr)"/>
+<rect x="1169" y="1890" width="380" height="42" rx="8" fill="#EFEBE3" stroke="#8A8170"/>
+<text x="1359" y="1916" font-size="14" font-weight="600" fill="#3D372C" text-anchor="middle">Deploy to Vercel (sin1)</text>
+<path d="M1549,1911 L1626,1911" stroke="#8A8170" stroke-width="1.8" marker-end="url(#arr)"/>
+<rect x="1626" y="1890" width="380" height="42" rx="8" fill="#EFEBE3" stroke="#8A8170"/>
+<text x="1816" y="1916" font-size="14" font-weight="600" fill="#3D372C" text-anchor="middle">/api/health OK → 005 rs_* cron</text>
+<rect x="20" y="1976" width="22" height="16" rx="4" fill="#EEEAFB" stroke="#5B4BB7"/>
+<text x="50" y="1989" font-size="14" fill="#1F2328">AI step</text>
+<rect x="138.8" y="1976" width="22" height="16" rx="4" fill="#E4F4EC" stroke="#2E8B62"/>
+<text x="168.8" y="1989" font-size="14" fill="#1F2328">Output</text>
+<rect x="249.20000000000002" y="1976" width="22" height="16" rx="4" fill="#FCEBD8" stroke="#C27420"/>
+<text x="279.20000000000005" y="1989" font-size="14" fill="#1F2328">Fallback / degraded</text>
+<rect x="468.8" y="1976" width="22" height="16" rx="4" fill="#FFFFFF" stroke="#5B6470"/>
+<text x="498.8" y="1989" font-size="14" fill="#1F2328">System step</text>
+<rect x="621.2" y="1976" width="22" height="16" rx="4" fill="#EFEBE3" stroke="#8A8170"/>
+<text x="651.2" y="1989" font-size="14" fill="#1F2328">Build / deploy</text>
+<rect x="798.8000000000001" y="1976" width="22" height="16" rx="4" fill="#FDECEC" stroke="#C0392B" stroke-dasharray="4 3"/>
+<text x="828.8000000000001" y="1989" font-size="14" fill="#1F2328">The Cut (removed)</text>
+<path d="M1011.6000000000001,1984 L1051.6000000000001,1984" stroke="#3A3F45" stroke-width="1.8" stroke-dasharray="6 5" marker-end="url(#arr)"/>
+<text x="1059.6000000000001" y="1989" font-size="14" fill="#1F2328">Asynchronous</text>
+<text x="20" y="2020" font-size="14" fill="#3A3F45">The Cut: OpenAlex (returned the wrong works for arXiv DOIs in testing) and real-time alerts (the Monday brief plus on-demand Search/Ask cover the need without noise).</text>
+<text x="20" y="2042" font-size="14" fill="#3A3F45">Evidence ladder: LAB → CODE (GitHub repo) → MODEL (HF models / Spaces) → PEER (OpenReview accepted, ACL / CVF / PMLR, or a non-arXiv S2 venue). Final = 0.35 relevance + 0.30 significance + 0.20 attention + 0.15 validation.</text>
+<text x="20" y="2064" font-size="14" fill="#3A3F45">Timing: ~60 s/day of source fetching, ~2 min/day pipeline, ~110 s on Sunday; each stage capped at 240 s of work (300 s max). Brief covers Mon-Fri announcements and is pre-scheduled in Resend.</text>
+<text x="20" y="2086" font-size="14" fill="#3A3F45">Semantic Scholar runs keyless: one best-effort batch per enrich run (failure = PARTIAL, footer note); no S2 search. Ask tools: search_index, get_papers, trend, related, my_log, get_fulltext, live_search.</text>
+<text x="20" y="2108" font-size="14" fill="#3A3F45">Email: onboarding@resend.dev delivers only to the Resend account owner (sathish_babu@pg27.mesaschool.co); any other recipient needs a verified sending domain.</text>
+</svg>

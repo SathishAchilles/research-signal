@@ -1,5 +1,6 @@
-// Upserts the settings row, the starting domains and the nine sources. Usage: npm run seed
-// Re-running resets these rows to the defaults below; pin_hash and run state are left alone.
+// Inserts the settings row, the starting domains and the nine sources. Usage: npm run seed
+// Insert-only: a row that already exists is left untouched, so re-running never resets values
+// changed in Settings. pin_hash and run state are never written here.
 import postgres from "postgres";
 
 const url = process.env.DATABASE_MIGRATION_URL;
@@ -123,19 +124,13 @@ async function main() {
   await sql`
     insert into research_signal.app_settings (id, recipients, thresholds, weights)
     values (1, ${recipients}, ${sql.json(thresholds)}, ${sql.json(weights)})
-    on conflict (id) do update set
-      recipients = excluded.recipients,
-      thresholds = excluded.thresholds,
-      weights = excluded.weights,
-      updated_at = now()`;
+    on conflict (id) do nothing`;
 
   for (const domain of domains) {
     await sql`
       insert into research_signal.domains (name, description, keywords)
       values (${domain.name}, ${domain.description}, ${[] as string[]})
-      on conflict (name) do update set
-        description = excluded.description,
-        keywords = excluded.keywords`;
+      on conflict (name) do nothing`;
   }
 
   for (const source of sources) {
@@ -145,12 +140,7 @@ async function main() {
         ${source.kind}, ${source.role}, ${source.enabled}, ${source.priority},
         ${source.secretName}, ${sql.json(source.params as postgres.JSONValue)}
       )
-      on conflict (kind) do update set
-        role = excluded.role,
-        enabled = excluded.enabled,
-        priority = excluded.priority,
-        secret_name = excluded.secret_name,
-        params = excluded.params`;
+      on conflict (kind) do nothing`;
   }
 
   const [counts] = await sql<{ domains: number; sources: number }[]>`

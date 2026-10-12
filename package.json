@@ -16,6 +16,7 @@
     "smoke": "tsx --env-file=.env.local scripts/smoke/index.ts"
   },
   "dependencies": {
+    "@ai-sdk/react": "4.0.140",
     "@base-ui/react": "^1.9.0",
     "@node-rs/argon2": "^2.2.2",
     "@openrouter/ai-sdk-provider": "^3.1.0",

@@ -1,0 +1,53 @@
+flowchart TB
+  subgraph SRC["External sources (toggled in Settings > Sources)"]
+    direction LR
+    AX["arXiv<br/>RSS daily + export API backstop<br/>1 req / 3 s via lease"]
+    HF["Hugging Face Papers<br/>daily_papers + /papers/id<br/>upvotes, code, models"]
+    OR["OpenReview<br/>/notes/search<br/>venue / decision (best-effort)"]
+    S2["Semantic Scholar<br/>/paper/batch (keyless, best-effort)<br/>venue, citations, builds-on"]
+    VEN["ACL | CVF | PMLR<br/>weekly diff (ETag)"]
+    FT["Full text<br/>arXiv HTML -> Unpaywall -> CORE"]
+  end
+
+  subgraph VC["Vercel - Next.js 16, sin1, maxDuration 300 s"]
+    direction TB
+    ST["/api/stage/[name]<br/>ingest -> embed1 -> embed2 -> score -> enrich<br/>hf_refresh | weekly | weekly_retry | retention | heartbeat"]
+    APP["App behind 6-digit PIN<br/>/brief/[week]  /paper/[id]  /log (CSV)"]
+    CMD["Command bar ( / or Cmd-K )"]
+    SEA["SEARCH<br/>hybrid FTS + vector (RRF), facets, presets"]
+    ASK["ASK agent<br/>route intent -> playbook -> tools -> grade -> synthesise -> validate"]
+    SET["/settings<br/>Domains | Sources | Delivery | Security | Usage"]
+    ACT["/a/[token]<br/>HMAC one-click Read / Client / Skip"]
+    LLM["lib/llm - OpenRouter only<br/>google/gemini-3.7-flash, google/gemini-embedding-001<br/>provider.only = google-vertex, google-ai-studio"]
+  end
+
+  subgraph DB["Supabase (shared) - schema research_signal"]
+    CRON["pg_cron rs_* + pg_net"]
+    TBL["domains, sources, papers, paper_domain, signals,<br/>briefs, actions, search_docs, ask_*, jobs, llm_calls"]
+    VEC["pgvector halfvec(768) HNSW | Vault keys"]
+  end
+
+  ORT["OpenRouter -> Google Vertex / AI Studio"]
+  RES["Resend -> inbox, Mon 07:00 IST"]
+  K["Kavita"]
+
+  SRC --> ST
+  CRON -->|"x-cron-secret"| ST
+  ST --> TBL
+  ST --> LLM
+  ASK --> LLM
+  SEA --> TBL
+  ASK --> SEA
+  LLM --> ORT
+  ST -->|"weekly brief"| RES
+  RES --> K
+  K --> APP
+  K --> CMD
+  CMD --> SEA
+  CMD --> ASK
+  K --> SET
+  SET --> TBL
+  K --> ACT
+  ACT --> TBL
+  APP --> TBL
+  TBL --- VEC
