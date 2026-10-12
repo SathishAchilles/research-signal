@@ -2,20 +2,34 @@
 
 import { useEffect, useRef, useState } from "react";
 
-// Progressive enhancement over the static SVG helix. Never mounts under reduced motion,
-// reduced transparency or the "Solid panels" toggle; the SVG frame is then the final render.
-type Geometry = { cx: number; amp: number; period: number; y0: number; y1: number; w: number };
+// Optional ambient glow behind the brief's figure stage: a shapeless field of slow-drifting
+// cyan motes (no strands, no DNA geometry). Decorative only; the figure stage is complete
+// without it. It fills its positioned parent (absolute inset-0).
+//
+// Placement rules:
+// - Never put this canvas under (or inside) an element with backdrop-filter. Animating pixels
+//   behind glass forces a re-blur of that layer on every frame.
+// - Never place it over figure images; it sits behind the stage frames.
+//
+// It never mounts under reduced motion, reduced transparency, more contrast, forced colors or
+// the "Solid panels" toggle (data-glass="off").
 
-const QUERIES = ["(prefers-reduced-motion: reduce)", "(prefers-reduced-transparency: reduce)"];
-const COUNT = 160;
+const QUERIES = [
+  "(prefers-reduced-motion: reduce)",
+  "(prefers-reduced-transparency: reduce)",
+  "(prefers-contrast: more)",
+  "(forced-colors: active)",
+];
+const COUNT = 90;
 const RADIUS = 1.5;
-const FRAME_MS = 33;
+const FRAME_MS = 33; // 30fps cap
 const BUCKETS = 4;
+const SPEED = 12; // CSS px per second, upward
 
 const allowed = () =>
   document.documentElement.dataset.glass !== "off" && !QUERIES.some((q) => matchMedia(q).matches);
 
-export function HelixParticles(props: Geometry) {
+export function HelixParticles({ className = "" }: { className?: string }) {
   const [on, setOn] = useState(false);
   useEffect(() => {
     const sync = () => setOn(allowed());
@@ -32,10 +46,22 @@ export function HelixParticles(props: Geometry) {
       mo.disconnect();
     };
   }, []);
-  return on ? <ParticleCanvas {...props} /> : null;
+  return on ? <AmbientCanvas className={className} /> : null;
 }
 
-function ParticleCanvas({ cx, amp, period, y0, y1, w }: Geometry) {
+// Deterministic PRNG so the field looks the same on every mount (mulberry32).
+function rng(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function AmbientCanvas({ className }: { className: string }) {
   const ref = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -45,54 +71,56 @@ function ParticleCanvas({ cx, amp, period, y0, y1, w }: Geometry) {
 
     const cs = getComputedStyle(c);
     const colors = [cs.getPropertyValue("--signal").trim() || "#3FE0D0", cs.getPropertyValue("--signal-2").trim() || "#3FB8BD"];
-    const span = y1 - y0;
-    const speed = 0.05 * period; // a twentieth of a period per second, upward (LAB -> PEER)
-    const half = COUNT / 2;
-    // Even i on strand A, odd i on strand B (phase + pi), offset by half a slot.
-    const ys = Float32Array.from({ length: COUNT }, (_, i) => y0 + (((i >> 1) + (i & 1) * 0.5) * span) / half);
-    const xs = new Float32Array(COUNT);
-    const bucket = new Uint8Array(COUNT); // alpha bucket, +BUCKETS when the particle is in front
+
+    // Positions are normalised (0..1) so a resize keeps the field; depth drives speed and alpha.
+    const rand = rng(0x5eed);
+    const nx = Float32Array.from({ length: COUNT }, () => rand());
+    const ny = Float32Array.from({ length: COUNT }, () => rand());
+    const depth = Float32Array.from({ length: COUNT }, () => rand());
+    const sway = Float32Array.from({ length: COUNT }, () => rand() * 2 * Math.PI);
+    const bucket = Uint8Array.from(depth, (d) => Math.min(BUCKETS - 1, Math.floor(d * BUCKETS)));
+    let w = 1;
+    let h = 1;
     let scale = 1;
+    let clock = 0;
 
     const step = (dt: number) => {
+      clock += dt;
       for (let i = 0; i < COUNT; i++) {
-        let y = ys[i] - speed * dt;
-        if (y < y0) y += span;
-        ys[i] = y;
-        const phi = (2 * Math.PI * y) / period + (i & 1) * Math.PI;
-        const cos = Math.cos(phi);
-        xs[i] = cx + amp * Math.sin(phi);
-        bucket[i] = Math.min(BUCKETS - 1, Math.floor(((1 + cos) / 2) * BUCKETS)) + (cos > 0 ? BUCKETS : 0);
+        let y = ny[i] - ((0.4 + 0.6 * depth[i]) * SPEED * dt) / h;
+        if (y < 0) y += 1;
+        ny[i] = y;
       }
     };
 
-    // Batched by strand x depth bucket: at most 16 fills a frame; shadow only on the front pass.
+    // Batched by colour x depth bucket: at most 8 fills a frame; shadow only on the front bucket.
     const draw = () => {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, c.width, c.height);
       ctx.setTransform(scale, 0, 0, scale, 0, 0);
-      for (let front = 0; front < 2; front++) {
+      for (let b = 0; b < BUCKETS; b++) {
+        const front = b === BUCKETS - 1;
         ctx.shadowBlur = front ? 6 : 0;
+        ctx.globalAlpha = 0.2 + 0.6 * ((b + 0.5) / BUCKETS);
         for (let s = 0; s < 2; s++) {
           ctx.fillStyle = colors[s];
           ctx.shadowColor = colors[s];
-          for (let b = 0; b < BUCKETS; b++) {
-            const key = b + front * BUCKETS;
-            ctx.beginPath();
-            let any = false;
-            for (let i = s; i < COUNT; i += 2) {
-              if (bucket[i] !== key) continue;
-              ctx.moveTo(xs[i] + RADIUS, ys[i]);
-              ctx.arc(xs[i], ys[i], RADIUS, 0, 2 * Math.PI);
-              any = true;
-            }
-            if (!any) continue;
-            ctx.globalAlpha = 0.35 + 0.65 * ((b + 0.5) / BUCKETS);
-            ctx.fill();
+          ctx.beginPath();
+          let any = false;
+          for (let i = s; i < COUNT; i += 2) {
+            if (bucket[i] !== b) continue;
+            const x = nx[i] * w + 6 * Math.sin(clock * 0.3 + sway[i]);
+            const y = ny[i] * h;
+            const r = RADIUS * (0.6 + 0.6 * depth[i]);
+            ctx.moveTo(x + r, y);
+            ctx.arc(x, y, r, 0, 2 * Math.PI);
+            any = true;
           }
+          if (any) ctx.fill();
         }
       }
       ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
     };
 
     let raf = 0;
@@ -119,10 +147,11 @@ function ParticleCanvas({ cx, amp, period, y0, y1, w }: Geometry) {
 
     const ro = new ResizeObserver(() => {
       const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-      c.width = Math.max(1, Math.round(c.clientWidth * dpr));
-      c.height = Math.max(1, Math.round(c.clientHeight * dpr));
-      scale = c.width / w;
-      step(0);
+      w = Math.max(1, c.clientWidth);
+      h = Math.max(1, c.clientHeight);
+      c.width = Math.round(w * dpr);
+      c.height = Math.round(h * dpr);
+      scale = dpr;
       draw();
     });
     ro.observe(c);
@@ -154,13 +183,13 @@ function ParticleCanvas({ cx, amp, period, y0, y1, w }: Geometry) {
       document.removeEventListener("visibilitychange", update);
       c.removeEventListener("transitionend", endFade);
     };
-  }, [cx, amp, period, y0, y1, w]);
+  }, []);
 
   return (
     <canvas
       ref={ref}
       aria-hidden
-      className="pointer-events-none absolute inset-0 h-full w-full"
+      className={`pointer-events-none absolute inset-0 h-full w-full ${className}`}
       style={{ opacity: 0, transition: "opacity 600ms" }}
     />
   );

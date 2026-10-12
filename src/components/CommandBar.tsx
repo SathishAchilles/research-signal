@@ -51,6 +51,14 @@ export function CommandBar() {
     return () => window.removeEventListener("keydown", onKey);
   }, [hidden]);
 
+  // The nav's search pill (GlassNav) opens the dialog through this event.
+  useEffect(() => {
+    if (hidden) return;
+    const onOpen = () => setOpen(true);
+    window.addEventListener("rs:command-open", onOpen);
+    return () => window.removeEventListener("rs:command-open", onOpen);
+  }, [hidden]);
+
   const text = query.trim();
 
   useEffect(() => {
@@ -104,31 +112,23 @@ export function CommandBar() {
       : [];
 
   return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="fixed right-4 bottom-4 z-40 flex items-center gap-2 rounded-lg border bg-background/90 px-3 py-1.5 text-sm text-muted-foreground shadow-sm backdrop-blur hover:text-foreground print:hidden"
+    <CommandDialog
+      open={open}
+      onOpenChange={setOpen}
+      title="Search or ask"
+      description="Search the index, or switch to Ask with Tab."
+      className="glass-elevated sm:max-w-xl print:hidden"
+    >
+      <Command
+        shouldFilter={false}
+        onKeyDown={(event) => {
+          if (event.key !== "Tab") return;
+          event.preventDefault();
+          setMode((current) => (current === "search" ? "ask" : "search"));
+        }}
       >
-        Search or ask
-        <kbd className="rounded border bg-muted px-1.5 font-mono text-xs">/</kbd>
-      </button>
-      <CommandDialog
-        open={open}
-        onOpenChange={setOpen}
-        title="Search or ask"
-        description="Search the index, or switch to Ask with Tab."
-        className="sm:max-w-xl"
-      >
-        <Command
-          shouldFilter={false}
-          onKeyDown={(event) => {
-            if (event.key !== "Tab") return;
-            event.preventDefault();
-            setMode((current) => (current === "search" ? "ask" : "search"));
-          }}
-        >
-          <div className="flex items-center gap-1 px-2 pt-2 text-xs" role="tablist" aria-label="Mode">
+        <div className="flex items-center gap-2 px-2 pt-2 pb-1 text-xs">
+          <div className="glass-chip flex items-center gap-0.5 p-0.5" role="tablist" aria-label="Mode">
             {(["search", "ask"] as const).map((m) => (
               <button
                 key={m}
@@ -137,62 +137,63 @@ export function CommandBar() {
                 aria-selected={mode === m}
                 onClick={() => setMode(m)}
                 className={cn(
-                  "rounded-md px-2 py-0.5 capitalize text-muted-foreground",
-                  mode === m && "bg-muted font-medium text-foreground",
+                  "rounded-full px-3 py-0.5 capitalize text-muted-foreground transition-colors hover:text-foreground",
+                  mode === m && "bg-signal/15 font-medium text-signal hover:text-signal",
                 )}
               >
                 {m}
               </button>
             ))}
-            <span className="ml-auto text-muted-foreground">Tab switches mode</span>
           </div>
-          <CommandInput
-            value={query}
-            onValueChange={setQuery}
-            placeholder={mode === "search" ? "Search papers, notes, briefs…" : "Ask a question about the research…"}
-          />
-          <CommandList>
-            {text === "" ? (
-              <CommandEmpty>{mode === "search" ? "Type to search." : "Type a question."}</CommandEmpty>
-            ) : mode === "search" ? (
-              <>
-                <CommandGroup heading="Search">
-                  <CommandItem value="__search" onSelect={() => go(searchHref)}>
-                    Search for “{text}”
-                    <CommandShortcut>{loading ? "…" : "↵"}</CommandShortcut>
-                  </CommandItem>
-                </CommandGroup>
-                {error && (
-                  <p role="alert" className="px-3 py-2 text-xs text-destructive">
-                    {error}
-                  </p>
-                )}
-                {visibleHits.length > 0 && (
-                  <CommandGroup heading="Top hits">
-                    {visibleHits.map((hit) => (
-                      <CommandItem
-                        key={hit.id}
-                        value={`hit-${hit.id}`}
-                        onSelect={() => go(hit.paperId ? `/paper/${hit.paperId}` : searchHref)}
-                      >
-                        <span className="truncate">{hit.title}</span>
-                        <CommandShortcut className="tracking-normal">{hit.entityType}</CommandShortcut>
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                )}
-              </>
-            ) : (
-              <CommandGroup heading="Ask">
-                <CommandItem value="__ask" onSelect={() => go(askHref)}>
-                  Ask: “{text}”
-                  <CommandShortcut>↵</CommandShortcut>
+          <span className="micro ml-auto">Tab switches mode</span>
+        </div>
+        <CommandInput
+          value={query}
+          onValueChange={setQuery}
+          placeholder={mode === "search" ? "Search papers, notes, briefs…" : "Ask a question about the research…"}
+        />
+        <CommandList>
+          {text === "" ? (
+            <CommandEmpty>{mode === "search" ? "Type to search." : "Type a question."}</CommandEmpty>
+          ) : mode === "search" ? (
+            <>
+              <CommandGroup heading="Search">
+                <CommandItem value="__search" onSelect={() => go(searchHref)} className="plate my-0.5 data-[selected=true]:bg-plate-hover">
+                  Search for “{text}”
+                  <CommandShortcut>{loading ? "…" : "↵"}</CommandShortcut>
                 </CommandItem>
               </CommandGroup>
-            )}
-          </CommandList>
-        </Command>
-      </CommandDialog>
-    </>
+              {error && (
+                <p role="alert" className="px-3 py-2 text-xs text-destructive">
+                  {error}
+                </p>
+              )}
+              {visibleHits.length > 0 && (
+                <CommandGroup heading="Top hits">
+                  {visibleHits.map((hit) => (
+                    <CommandItem
+                      key={hit.id}
+                      value={`hit-${hit.id}`}
+                      className="plate my-0.5 data-[selected=true]:bg-plate-hover"
+                      onSelect={() => go(hit.paperId ? `/paper/${hit.paperId}` : searchHref)}
+                    >
+                      <span className="truncate">{hit.title}</span>
+                      <CommandShortcut className="tracking-normal">{hit.entityType}</CommandShortcut>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              )}
+            </>
+          ) : (
+            <CommandGroup heading="Ask">
+              <CommandItem value="__ask" onSelect={() => go(askHref)} className="plate my-0.5 data-[selected=true]:bg-plate-hover">
+                Ask: “{text}”
+                <CommandShortcut>↵</CommandShortcut>
+              </CommandItem>
+            </CommandGroup>
+          )}
+        </CommandList>
+      </Command>
+    </CommandDialog>
   );
 }

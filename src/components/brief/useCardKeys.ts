@@ -26,7 +26,10 @@ export function useCardKeys() {
         const index = current ? cards.indexOf(current) : -1;
         const next = key === "j" ? Math.min(index + 1, cards.length - 1) : Math.max(index - 1, 0);
         cards[next].focus();
-        cards[next].scrollIntoView({ block: "nearest" });
+        cards[next].scrollIntoView({
+          block: "nearest",
+          behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        });
       } else if (key in ACTION_KEYS && current) {
         event.preventDefault();
         current.querySelector<HTMLButtonElement>(`[data-action="${ACTION_KEYS[key]}"]`)?.click();

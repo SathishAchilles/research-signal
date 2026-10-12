@@ -109,7 +109,7 @@
   --glass-filter-elev: blur(24px) saturate(190%) brightness(.95);
   --glass-shadow: 0 12px 40px rgb(0 0 0 / .45);
   --glass-shadow-elev: 0 24px 64px rgb(0 0 0 / .55);
-  --glow-signal: 0 0 24px rgb(63 224 208 / .25); /* helix nodes + linked card only */
+  --glow-signal: 0 0 24px rgb(63 224 208 / .25); /* figure-stage callout nodes + linked card only */
 
   /* text */
   --text: #E6F4F3;
@@ -187,6 +187,7 @@
     --glass-filter: none; --glass-filter-nav: none; --glass-filter-elev: none;
     --glass-rim: var(--text-muted); --glass-rim-top: var(--text-muted); --plate-rim: var(--chip-border);
     --text-muted: #B9D0D3;
+    --glow-signal: none;
   }
 }
 

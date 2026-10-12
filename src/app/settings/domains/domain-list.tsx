@@ -103,7 +103,7 @@ export function DomainList({ domains }: { domains: DomainRow[] }) {
         <Card key={d.id} size="sm">
           <CardContent className="flex flex-col gap-2">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="font-medium">{d.name}</h2>
+              <h2 className="font-heading text-base font-medium">{d.name}</h2>
               {!d.active && <Badge variant="secondary">Paused</Badge>}
               {!d.centroidUpdatedAt && <Badge variant="destructive">No centroid</Badge>}
               <div className="ml-auto flex items-center gap-2">
@@ -134,11 +134,11 @@ export function DomainList({ domains }: { domains: DomainRow[] }) {
               </div>
             </div>
             {d.description && <p className="text-sm text-muted-foreground">{d.description}</p>}
-            <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-xs">
+            <dl className="grid grid-cols-[max-content_1fr] items-baseline gap-x-3 gap-y-1 text-xs">
               {LIST_FIELDS.map(({ key, label }) =>
                 d[key].length > 0 ? (
                   <div key={key} className="contents">
-                    <dt className="text-muted-foreground">{label}</dt>
+                    <dt className="micro">{label}</dt>
                     <dd>{d[key].join(", ")}</dd>
                   </div>
                 ) : null,

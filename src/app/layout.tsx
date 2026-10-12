@@ -3,6 +3,8 @@ import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import Script from "next/script";
 import { Suspense } from "react";
 import { CommandBar } from "@/components/CommandBar";
+import { GlassNav } from "@/components/glass/GlassNav";
+import { GlassRuntime } from "@/components/glass/GlassRuntime";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -54,9 +56,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <Script id="rs-glass-boot" strategy="beforeInteractive">
           {GLASS_BOOT}
         </Script>
+        <Suspense fallback={null}>
+          <GlassNav />
+        </Suspense>
         {children}
         <Suspense fallback={null}>
           <CommandBar />
+          <GlassRuntime />
         </Suspense>
       </body>
     </html>

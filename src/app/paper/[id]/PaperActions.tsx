@@ -33,15 +33,18 @@ export function PaperActions({ paperId, current }: { paperId: string; current: s
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Your action">
       {ACTIONS.map(({ action, label }) => (
         <Button
           key={action}
           variant={chosen === action ? "default" : "outline"}
           size="sm"
+          aria-pressed={chosen === action}
+          className="px-3"
           disabled={pending}
           onClick={() => record(action)}
         >
+          {chosen === action ? "✓ " : ""}
           {label}
         </Button>
       ))}

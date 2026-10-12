@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
-import { attentionText, COLORS } from "@/lib/brief/cues";
+import { attentionText, COLORS_UI } from "@/lib/brief/cues";
 import { formatPercent } from "@/lib/brief/tokens";
 import type { ActionKind, BriefCard } from "@/lib/brief/types";
+import { cn } from "@/lib/utils";
 import { CardActions } from "./CardActions";
 import { EvidenceMeter } from "./EvidenceMeter";
 import { SignalChip } from "./SignalChip";
@@ -15,6 +16,7 @@ export type CardLike = Pick<BriefCard, "paperId" | "title" | "verdict" | "rung" 
 export type CardProse = { headline?: string; lede?: string; clientAngle?: string; verdictReason?: string; line?: string; pointer?: string };
 
 // Focusable card shell used by every tier; j/k move between [data-card] elements.
+// scroll-mt-32 clears the sticky nav and domain bar; data-linked is set by the figure-stage sync.
 export function CardFrame({ card, action, children, className = "" }: { card: CardLike; action: ActionKind | null; children: ReactNode; className?: string }) {
   return (
     <article
@@ -22,7 +24,10 @@ export function CardFrame({ card, action, children, className = "" }: { card: Ca
       data-card
       data-paper-id={card.paperId}
       tabIndex={0}
-      className={`relative rounded-md border bg-card py-3 pr-3 pl-4 outline-offset-2 focus-visible:outline-3 focus-visible:outline-[#0072B2] ${className}`}
+      className={cn(
+        "plate relative scroll-mt-32 py-3 pr-3 pl-4 outline-offset-2 transition-[border-color,box-shadow] duration-150 hover:bg-plate-hover focus-visible:outline-3 focus-visible:outline-solid focus-visible:outline-focus data-[linked]:border-signal data-[linked]:shadow-[var(--glow-signal)]",
+        className,
+      )}
     >
       <VerdictBar verdict={card.verdict} />
       {children}
@@ -41,7 +46,7 @@ export function CueRow({ card }: { card: CardLike }) {
       <EvidenceMeter rung={card.rung} />
       <SignalChip signal={card.signalType} />
       {rising ? (
-        <span className="text-xs font-bold" style={{ color: COLORS.rising }}>
+        <span className="font-mono text-xs font-medium" style={{ color: COLORS_UI.rising }}>
           UP {formatPercent(card.evidence.rising_pct!)}
         </span>
       ) : null}
@@ -58,9 +63,9 @@ export function AttentionLine({ card }: { card: CardLike }) {
   ].filter((l): l is [string, string] => Boolean(l[1]));
   return (
     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-      <span>{attentionText(card)}</span>
+      <span className="num">{attentionText(card)}</span>
       {links.map(([label, href]) => (
-        <a key={label} href={href} target="_blank" rel="noreferrer" className="underline hover:text-foreground">
+        <a key={label} href={href} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-signal">
           {label}
         </a>
       ))}
@@ -72,8 +77,8 @@ export function AttentionLine({ card }: { card: CardLike }) {
 export function MoreDetails({ abstract, reason }: { abstract: string; reason?: string }) {
   return (
     <details data-expand className="mt-1 text-sm">
-      <summary className="cursor-pointer text-xs text-muted-foreground">Abstract{reason ? " and verdict reason" : ""}</summary>
-      {reason ? <p className="mt-1 text-xs">Why: {reason}</p> : null}
+      <summary className="micro cursor-pointer hover:text-signal">Abstract{reason ? " and verdict reason" : ""}</summary>
+      {reason ? <p className="mt-1.5 text-xs">Why: {reason}</p> : null}
       <p className="mt-1 text-muted-foreground">{abstract}</p>
     </details>
   );

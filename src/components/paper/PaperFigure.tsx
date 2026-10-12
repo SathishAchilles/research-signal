@@ -1,7 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
-import type { ReactNode } from "react";
 import type { SignalType } from "@/lib/pipeline/rank";
+import { cn } from "@/lib/utils";
+import { SignalGlyph, signalGlyphLabel } from "./SignalGlyph";
 
 export type PaperFigureProps = {
   paperId: string;
@@ -13,55 +14,31 @@ export type PaperFigureProps = {
   width?: number;
   height?: number;
   className?: string;
+  // Additive options (every existing caller keeps working without them).
+  /** Paper title; when given, alt reads "Figure from <title>". */
+  title?: string;
+  /** The first hero frame only: preloaded and eager. Everything else is lazy. */
+  priority?: boolean;
+  /** Overrides the default `sizes` (`<width>px`) for fluid layouts. */
+  sizes?: string;
+  /** Caption plate with caption and attribution. Off for thumbnails. Default true. */
+  showCaption?: boolean;
+  /** Wrap the frame in a link to /paper/<id>. Turn off inside rows that are already links. Default true. */
+  linked?: boolean;
 };
 
-// Simple line glyphs drawn in currentColor, one per signal type, for papers with no figure.
-const GLYPHS: Record<SignalType, ReactNode> = {
-  BENCH: (
-    <>
-      <path d="M8 40h32" />
-      <path d="M12 40V26M20 40V16M28 40V22M36 40V10" strokeWidth={4} />
-    </>
-  ),
-  EVAL: (
-    <>
-      <path d="M24 8v32M12 40h24M10 16h28" />
-      <path d="M10 16l-5 12h10zM38 16l-5 12h10z" />
-    </>
-  ),
-  REFRAME: (
-    <>
-      <rect x="8" y="8" width="24" height="24" />
-      <rect x="16" y="16" width="24" height="24" strokeDasharray="3 3" />
-    </>
-  ),
-  METHOD: (
-    <>
-      <circle cx="10" cy="24" r="4" />
-      <circle cx="38" cy="12" r="4" />
-      <circle cx="38" cy="36" r="4" />
-      <path d="M14 24h8l12-10M22 24l12 10" />
-    </>
-  ),
-};
-
-function Glyph({ signalType }: { signalType: SignalType | null }) {
-  return (
-    <svg
-      viewBox="0 0 48 48"
-      width="40%"
-      height="40%"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      role="img"
-      aria-label={signalType ? `${signalType} paper, no figure` : "No figure"}
-    >
-      {signalType ? GLYPHS[signalType] : <rect x="8" y="8" width="32" height="32" strokeDasharray="4 4" />}
-    </svg>
-  );
+// The hosts next.config.ts images.remotePatterns allows. next/image throws at render for any other
+// host, so an unservable URL falls back to the glyph instead of breaking the page.
+export function isServableFigure(url: string | null | undefined): url is string {
+  if (!url) return false;
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "https:") return false;
+    if (u.hostname === "arxiv.org") return u.pathname.startsWith("/html/");
+    return u.hostname === "cdn-uploads.huggingface.co" || u.hostname === "cdn-thumbnails.huggingface.co";
+  } catch {
+    return false;
+  }
 }
 
 export function figureAttribution(authors: readonly string[], arxivId: string | null): string {
@@ -70,9 +47,25 @@ export function figureAttribution(authors: readonly string[], arxivId: string | 
   return `Figure: ${who}${arxivId ? `, arXiv ${arxivId}` : ""}`;
 }
 
-// The paper's lead figure in a fixed box, linked to the paper, with its caption and attribution.
-// Images go through next/image (Vercel resizes and caches them; they are never re-hosted). Without
-// a figure, the box shows the signal-type glyph instead.
+// Specimen-frame corner brackets (decorative), drawn in the frame's padding, never over the figure.
+function Corners() {
+  const base = "pointer-events-none absolute size-2.5 border-signal/70";
+  return (
+    <>
+      <span aria-hidden className={`${base} top-1 left-1 border-t border-l`} />
+      <span aria-hidden className={`${base} top-1 right-1 border-t border-r`} />
+      <span aria-hidden className={`${base} bottom-1 left-1 border-b border-l`} />
+      <span aria-hidden className={`${base} right-1 bottom-1 border-r border-b`} />
+    </>
+  );
+}
+
+// The paper's lead figure in a fixed box with its caption and attribution, linked to the paper.
+// - Images go through next/image (Vercel resizes and caches them; they are never re-hosted).
+// - The frame is a solid plate with a 1px rim. It must never sit under a backdrop-filter element.
+// - The figure sits on a light mat (arXiv figures are often transparent with dark strokes) and is
+//   never blurred or tinted; only a subtle inset vignette overlays it.
+// - Without a servable figure, the same box shows the signal-type glyph, so nothing shifts.
 export function PaperFigure({
   paperId,
   arxivId,
@@ -83,33 +76,74 @@ export function PaperFigure({
   width = 320,
   height = 200,
   className,
+  title,
+  priority = false,
+  sizes,
+  showCaption = true,
+  linked = true,
 }: PaperFigureProps) {
   const attribution = figureAttribution(authors, arxivId);
-  return (
-    <figure className={className} style={{ width, maxWidth: "100%" }}>
-      <Link
-        href={`/paper/${paperId}`}
-        className="relative flex items-center justify-center overflow-hidden border border-current/15 bg-white text-current/40"
-        style={{ width: "100%", height }}
-      >
-        {figureUrl ? (
+  const src = isServableFigure(figureUrl) ? figureUrl : null;
+  const text = caption?.trim();
+  const framed = height >= 120; // thumbnails skip the padding and corner marks
+  const frameClass = cn(
+    "relative flex items-center justify-center overflow-hidden border border-plate-rim bg-plate-solid text-signal/75",
+    framed ? "rounded-tile p-2" : "rounded-[6px]",
+    linked && "transition-colors duration-150 hover:border-signal/60",
+  );
+
+  const inner = (
+    <>
+      {src ? (
+        <span className={cn("relative block size-full overflow-hidden bg-[#F3F7F7]", framed ? "rounded-[6px]" : "rounded-[5px]")}>
           <Image
-            src={figureUrl}
-            alt={caption?.trim() || attribution}
+            src={src}
+            alt={title ? `Figure from ${title}` : text || attribution}
             fill
-            sizes={`${width}px`}
-            className="object-contain"
+            sizes={sizes ?? `${width}px`}
+            preload={priority}
+            loading={priority ? undefined : "lazy"}
+            fetchPriority={priority ? "high" : undefined}
+            className={cn("object-contain", framed && "p-1")}
           />
-        ) : (
-          <Glyph signalType={signalType} />
-        )}
-      </Link>
-      {figureUrl && (
-        <figcaption className="mt-1 text-[11px] leading-4 text-current/70">
-          {caption?.trim() && <span className="line-clamp-2">{caption.trim()}</span>}
-          <span className="block">{attribution}</span>
-        </figcaption>
+          <span aria-hidden className="pointer-events-none absolute inset-0 rounded-[inherit] shadow-[inset_0_0_24px_rgb(4_20_24/.2)]" />
+        </span>
+      ) : (
+        <span
+          className="flex size-full items-center justify-center rounded-[6px] bg-[linear-gradient(rgb(127_224_230/.05)_1px,transparent_1px),linear-gradient(90deg,rgb(127_224_230/.05)_1px,transparent_1px)] bg-size-[12px_12px]"
+        >
+          <SignalGlyph signalType={signalType} size={framed ? "38%" : "70%"} label={signalGlyphLabel(signalType)} />
+        </span>
       )}
+      {framed ? <Corners /> : null}
+    </>
+  );
+
+  return (
+    <figure data-figure={src ? "image" : "glyph"} className={cn("text-foreground", className)} style={{ width, maxWidth: "100%" }}>
+      {linked ? (
+        <Link href={`/paper/${paperId}`} className={frameClass} style={{ width: "100%", height }}>
+          {inner}
+        </Link>
+      ) : (
+        <div className={frameClass} style={{ width: "100%", height }}>
+          {inner}
+        </div>
+      )}
+      {showCaption ? (
+        <figcaption className="mt-1.5 rounded-tile border border-plate-rim bg-plate px-2.5 py-1.5 text-[11px] leading-4 [text-shadow:none]">
+          {src ? (
+            <>
+              {text ? <span className="line-clamp-2 text-foreground/90">{text}</span> : null}
+              <span className="mt-0.5 block font-mono text-[10.5px] tracking-[.02em] text-muted-foreground">{attribution}</span>
+            </>
+          ) : (
+            <span className="block font-mono text-[10.5px] tracking-[.02em] text-muted-foreground">
+              No figure{signalType ? ` · ${signalType}` : ""}
+            </span>
+          )}
+        </figcaption>
+      ) : null}
     </figure>
   );
 }
