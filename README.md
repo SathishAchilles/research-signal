@@ -26,7 +26,7 @@ Requirements: Node.js 20+ and a Supabase project with `pg_cron`, `pg_net` and `v
    cp .env.example .env.local
    ```
 
-Steps 2 to 4 run the SQL files in `scripts/sql/` in this order. `npm run sql -- <file>` connects with `DATABASE_ADMIN_URL`, which is the `postgres` role. The files that `rs_app` must run (because it owns the tables) set `DATABASE_ADMIN_URL="$DATABASE_MIGRATION_URL"` for that one command. That override reads the URL from your shell, so first run `export DATABASE_MIGRATION_URL=<the rs_app session-pooler URL from .env.local>`. A variable that is already set in the shell takes precedence over `--env-file`. Each file's header names the role that runs it.
+Steps 2 to 4 run the SQL files in `scripts/sql/` in this order. `npm run sql -- <file>` connects with `DATABASE_ADMIN_URL`, which is the `postgres` role. The files that `rs_app` must run (because it owns the tables) set `DATABASE_ADMIN_URL="$DATABASE_MIGRATION_URL"` for that one command. That override reads the URL from your shell, so first run `export DATABASE_MIGRATION_URL=<the rs_app session-pooler URL from .env.local>`. A variable that is already set in the shell takes precedence over `--env-file`. Each file's header names the role that runs it. `npm run sql -- scripts/sql/000_ping.sql` (`select 1`) checks the admin connection first; it prints `ok`.
 
 2. Bootstrap the schema and the `rs_app` role, as `postgres`, passing the role's password inline:
 
@@ -75,11 +75,13 @@ Steps 2 to 4 run the SQL files in `scripts/sql/` in this order. `npm run sql -- 
 
 8. Run the app locally with `npm run dev`, or deploy by pushing to `main`.
 
-9. After the production deploy answers `/api/health` with OK, create the six `rs_*` cron jobs as `postgres`. `scripts/sql/005_cron.sql` has not been written yet (task 12.5). Once it exists:
+9. After the production deploy answers `/api/health` with OK, schedule the pipeline as `postgres`. `scripts/sql/005_cron.sql` stores `CRON_SECRET` in Vault as `rs_cron_secret`, creates the `research_signal.call_stage(name)` helper (a `pg_net` POST to `$APP_URL/api/stage/<name>` with the `x-cron-secret` header) and schedules six jobs: `rs_ingest`, `rs_drain`, `rs_hf_refresh`, `rs_weekly`, `rs_weekly_retry` and `rs_retention`. It is safe to re-run, and it leaves other apps' cron jobs alone. Use the same `CRON_SECRET` that is set in Vercel:
 
    ```sh
    CRON_SECRET=<secret> APP_URL=https://research-signal.vercel.app npm run sql -- scripts/sql/005_cron.sql
    ```
+
+   Check it with `select jobname, schedule from cron.job where jobname like 'rs\_%';`, which should return six rows.
 
 More detail on roles, grants and each SQL file is in [docs/database.md](docs/database.md).
 
