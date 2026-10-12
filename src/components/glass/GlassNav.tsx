@@ -2,15 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
+import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 
 const HIDDEN_ON = /^\/(login|a\/)/;
-const STORAGE_KEY = "rs-glass";
 
 const LINKS = [
   { href: "/", label: "Brief" },
-  { href: "/search", label: "Search" },
   { href: "/ask", label: "Ask" },
   { href: "/log", label: "Log" },
   { href: "/settings", label: "Settings" },
@@ -18,18 +16,10 @@ const LINKS = [
 
 function isCurrent(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/" || pathname === "/brief" || pathname.startsWith("/brief/");
+  // Search folded into Ask: the full results page (/search) is Ask's "See all results".
+  if (href === "/ask") return pathname === "/ask" || pathname.startsWith("/ask/") || pathname === "/search";
   return pathname === href || pathname.startsWith(`${href}/`);
 }
-
-// The "Solid panels" state lives on <html data-glass>, which the boot script sets before paint.
-// Reading it through useSyncExternalStore keeps SSR (always false) and the client in step without a mismatch.
-function subscribeGlass(onChange: () => void) {
-  const observer = new MutationObserver(onChange);
-  observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-glass"] });
-  return () => observer.disconnect();
-}
-const readSolid = () => document.documentElement.dataset.glass === "off";
-const readSolidOnServer = () => false;
 
 const NAV_BOX = "mx-auto mt-3 w-[min(72rem,calc(100%-2rem))] print:hidden";
 
@@ -40,7 +30,6 @@ export function GlassNavPlaceholder() {
 
 export function GlassNav() {
   const pathname = usePathname();
-  const solid = useSyncExternalStore(subscribeGlass, readSolid, readSolidOnServer);
   const links = useRef<HTMLUListElement>(null);
 
   // On narrow screens the link row scrolls sideways; keep the current page's link in view.
@@ -50,19 +39,6 @@ export function GlassNav() {
     if (!list || !current || list.scrollWidth <= list.clientWidth) return;
     list.scrollLeft = current.offsetLeft - (list.clientWidth - current.offsetWidth) / 2;
   }, [pathname]);
-
-  const toggleSolid = useCallback(() => {
-    const next = !readSolid();
-    const root = document.documentElement;
-    if (next) root.dataset.glass = "off";
-    else delete root.dataset.glass;
-    try {
-      if (next) localStorage.setItem(STORAGE_KEY, "off");
-      else localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      // Storage can throw (private mode, blocked site data); the toggle still applies for this page view.
-    }
-  }, []);
 
   if (HIDDEN_ON.test(pathname)) return null;
 
@@ -112,39 +88,20 @@ export function GlassNav() {
         <button
           type="button"
           onClick={() => window.dispatchEvent(new CustomEvent("rs:command-open"))}
+          aria-haspopup="dialog"
+          aria-keyshortcuts="/ Meta+K Control+K"
+          title="Ask (/ or ⌘K)"
           className="glass-chip glass-interactive flex h-9 shrink-0 items-center gap-2 px-3 text-sm text-[var(--text)] print:hidden"
         >
           <svg viewBox="0 0 16 16" className="size-3.5" aria-hidden="true" focusable="false">
             <circle cx="7" cy="7" r="4.5" fill="none" stroke="var(--micro)" strokeWidth="1.5" />
             <path d="M10.5 10.5 14 14" stroke="var(--micro)" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
-          <span className="sr-only md:not-sr-only">Search or ask</span>
-          <kbd className="micro hidden rounded border border-[var(--glass-rim)] px-1.5 leading-5 md:inline">/</kbd>
-        </button>
-
-        <button
-          type="button"
-          aria-pressed={solid}
-          title="Solid panels"
-          onClick={toggleSolid}
-          className={cn(
-            "glass-chip glass-interactive flex h-9 shrink-0 items-center gap-2 px-3 text-sm text-[var(--text)]",
-            solid && "border-[var(--signal)] text-[var(--signal)]",
-          )}
-        >
-          <svg viewBox="0 0 16 16" className="size-3.5" aria-hidden="true" focusable="false">
-            <rect
-              x="2"
-              y="2"
-              width="12"
-              height="12"
-              rx="3"
-              fill={solid ? "currentColor" : "none"}
-              stroke="currentColor"
-              strokeWidth="1.5"
-            />
-          </svg>
-          <span className="sr-only xl:not-sr-only">Solid panels</span>
+          {/* Visible "Ask" starts the name (WCAG 2.5.3); the suffix tells it apart from the Ask page link. */}
+          <span className="sr-only md:not-sr-only">Ask</span>
+          <span className="sr-only">, quick ask dialog</span>
+          <kbd aria-hidden="true" className="micro hidden rounded border border-[var(--glass-rim)] px-1.5 leading-5 md:inline">⌘K</kbd>
+          <kbd aria-hidden="true" className="micro hidden rounded border border-[var(--glass-rim)] px-1.5 leading-5 md:inline">/</kbd>
         </button>
       </nav>
     </header>

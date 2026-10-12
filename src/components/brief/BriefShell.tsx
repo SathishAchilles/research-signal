@@ -10,7 +10,7 @@ const KEYS: [string, string][] = [
   ["c", "Bring to client"],
   ["s", "Skip"],
   ["Enter", "Show abstract"],
-  ["/", "Search"],
+  ["/", "Ask"],
   ["?", "This help"],
 ];
 

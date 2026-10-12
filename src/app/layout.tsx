@@ -32,9 +32,10 @@ export const metadata: Metadata = {
   description: "Weekly AI/ML research brief",
 };
 
-// Runs before hydration: applies the persisted "Solid panels" choice and flags Chromium for SVG refraction.
+// Runs before hydration: flags Chromium for SVG refraction. The "Solid panels" toggle is gone, so a value it
+// stored earlier is cleared rather than applied (nothing could switch it back); OS transparency/contrast settings still apply via CSS.
 const GLASS_BOOT = `(function(){var d=document.documentElement;
-try{if(localStorage.getItem("rs-glass")==="off")d.dataset.glass="off";}catch(e){}
+try{localStorage.removeItem("rs-glass");}catch(e){}
 try{var b=navigator.userAgentData&&navigator.userAgentData.brands;
 if(b&&b.some(function(x){return x.brand==="Chromium";}))d.dataset.refract="";}catch(e){}})();`;
 

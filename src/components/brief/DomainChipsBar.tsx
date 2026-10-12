@@ -21,13 +21,14 @@ export function DomainChipsBar({ selection }: { selection: BriefSelection }) {
           Rising <span className="num text-muted-foreground">{selection.rising.length}</span>
         </a>
       ) : null}
-      <form action="/search" className="ml-auto shrink-0">
+      <form action="/ask" className="ml-auto shrink-0">
         <input
           name="q"
-          type="search"
+          type="text"
+          autoComplete="off"
           data-search-input
-          placeholder="Search papers ( / )"
-          aria-label="Search papers"
+          placeholder="Ask the papers ( / )"
+          aria-label="Ask the papers"
           className="h-8 w-48 rounded-tile border border-input bg-plate-solid px-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-focus"
         />
       </form>

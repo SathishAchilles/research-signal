@@ -2,11 +2,9 @@ import Image from "next/image";
 import type { ReactNode } from "react";
 import { figureAttribution, isServableFigure } from "@/components/paper/PaperFigure";
 import { SignalGlyph, signalGlyphLabel } from "@/components/paper/SignalGlyph";
-import { ConeChart } from "@/components/viz/ConeChart";
-import { StatTile } from "@/components/viz/StatTile";
 import { COLORS_UI, VERDICT_LABEL, meterText } from "@/lib/brief/cues";
 import type { BriefFigure } from "@/lib/brief/load";
-import { formatCount, formatPercent } from "@/lib/brief/tokens";
+import { formatPercent } from "@/lib/brief/tokens";
 import type { BriefCard, BriefDoc } from "@/lib/brief/types";
 import type { SignalType } from "@/lib/pipeline/rank";
 import { HelixParticles } from "./helix/HelixParticles";
@@ -100,8 +98,8 @@ export function FigureFrame({
 
 type StageItem = { id: string; card: BriefCard; rank: number; domainName: string; headline?: string; figure: BriefFigure | null };
 
-const LEAD = { width: 640, height: 480, sizes: "(min-width: 1024px) 440px, 100vw" };
-const SIDE = { width: 400, height: 250, sizes: "(min-width: 1024px) 300px, (min-width: 640px) 50vw, 100vw" };
+const LEAD = { width: 640, height: 480, sizes: "(min-width: 1024px) 680px, 100vw" };
+const SIDE = { width: 400, height: 250, sizes: "(min-width: 1024px) 460px, (min-width: 640px) 50vw, 100vw" };
 
 // One stage frame with its Dribbble-style callout: a dot node on the frame rim, a leader line,
 // and a plate carrying rank, domain, verdict, rung, signal type and the rising figure. The whole
@@ -180,24 +178,12 @@ function FigureStage({ items }: { items: StageItem[] }) {
   );
 }
 
-// The brief's bento hero: one glass shell (heading, stat tiles, attention cones) beside the figure
-// stage, which sits on the page background so no figure is ever under a backdrop-filter.
-export function BriefHero({ doc, status, figures }: { doc: BriefDoc; status: string; figures: Record<string, BriefFigure> }) {
+// The figure stage, full width below the week hero: the top-3 papers' lead figures with their
+// callouts. It sits on the page background so no figure is ever under a backdrop-filter.
+export function BriefHero({ doc, figures }: { doc: BriefDoc; figures: Record<string, BriefFigure> }) {
   const { selection, prose } = doc;
-  const cards = Object.values(selection.cards);
   const domainName = new Map(selection.domains.map((d) => [d.domainId, d.name]));
   const headlines = new Map(prose.domains.flatMap((d) => d.cards.map((c) => [c.cardId, c.headline] as const)));
-  const week = Number(selection.isoWeek.slice(6));
-
-  const risingPcts = selection.rising.map((id) => selection.cards[id]?.evidence.rising_pct).filter((v): v is number => v != null);
-  const topRising = risingPcts.length ? Math.max(...risingPcts) : null;
-  const upvotes = (ids: (string | null)[]) =>
-    ids.reduce((sum, id) => sum + (id ? (selection.cards[id]?.evidence.hf_upvotes ?? 0) : 0), 0);
-  const cones = [
-    ...selection.domains.map((d) => ({ label: d.name, value: upvotes([d.hero, ...d.standard, ...d.compact]) })),
-    ...(selection.rising.length ? [{ label: "Rising", value: upvotes(selection.rising) }] : []),
-  ].map((c) => ({ ...c, display: formatCount(c.value) }));
-  const degraded = selection.sourceHealth.length;
 
   const items: StageItem[] = selection.top3
     .filter((id) => selection.cards[id])
@@ -214,30 +200,11 @@ export function BriefHero({ doc, status, figures }: { doc: BriefDoc; status: str
     });
 
   return (
-    <section aria-label="This week at a glance" className="grid gap-6 pt-2 lg:grid-cols-[minmax(0,25rem)_minmax(0,1fr)]">
-      <div className="glass-base flex flex-col gap-4 p-5">
-        <p className="micro">
-          research-signal · {selection.isoWeek} · {status.toLowerCase()} · press ? for shortcuts
-        </p>
-        <p aria-hidden className="font-display text-[44px] leading-none font-semibold tracking-tight sm:text-[56px]">
-          WEEK {week} <span className="text-signal-2">SIGNAL</span>
-        </p>
-        <h1 className="max-w-[40ch] font-heading text-2xl leading-snug font-medium tracking-tight">{prose.weekLine}</h1>
-        <div className="grid grid-cols-2 gap-3">
-          <StatTile label="Featured" value={String(cards.length)} />
-          <StatTile label="Bring to client" value={String(cards.filter((c) => c.verdict === "CLIENT").length)} />
-          <StatTile label="Hero" value={String(selection.domains.filter((d) => d.hero).length)} />
-          <StatTile label={topRising == null ? "No risers" : "Top rising"} value={topRising == null ? "—" : `UP ${formatPercent(topRising)}`} />
-        </div>
-        <div className="plate p-4">
-          <ConeChart title="Attention this week" unit="HF upvotes" data={cones} />
-        </div>
-        <p className="micro">Sources · {degraded === 0 ? "all normal" : `${degraded} degraded`}</p>
-      </div>
-      <div className="flex flex-col gap-3">
-        <p className="micro">Figure stage · top 3 this week</p>
-        <FigureStage items={items} />
-      </div>
+    <section aria-labelledby="figure-stage-heading" className="flex flex-col gap-3">
+      <h2 id="figure-stage-heading" className="micro">
+        Figure stage · top 3 this week
+      </h2>
+      <FigureStage items={items} />
     </section>
   );
 }

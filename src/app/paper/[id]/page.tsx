@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import ReadAloud from "@/components/audio/ReadAloud";
 import { EvidenceMeter } from "@/components/brief/EvidenceMeter";
 import { SignalChip } from "@/components/brief/SignalChip";
 import { PaperFigure } from "@/components/paper/PaperFigure";
@@ -10,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { ConeChart } from "@/components/viz/ConeChart";
 import { SpecTable } from "@/components/viz/SpecTable";
 import { db } from "@/db/client";
+import { buildPaperSpeech } from "@/lib/audio/speech";
 import { actions, domains, paperDomain, papers, signals } from "@/db/schema";
 import { COLORS_UI } from "@/lib/brief/cues";
 import type { Rung } from "@/lib/pipeline/rank";
@@ -184,6 +186,19 @@ async function PaperView({ id }: { id: string }) {
           <span aria-hidden className="mx-1 hidden h-5 w-px bg-rule/50 sm:inline-block" />
           <PaperActions paperId={paper.id} current={lastAction} />
         </div>
+        <ReadAloud
+          key={paper.id}
+          title={paper.title}
+          segments={buildPaperSpeech({
+            title: paper.title,
+            abstract: paper.abstract,
+            signalType,
+            rung: evidence?.rung ?? null,
+            verdict: domainRows[0]?.verdict ?? null,
+            clientAngle: domainRows[0]?.clientAngle ?? null,
+            domainName: domainRows[0]?.name ?? null,
+          })}
+        />
       </header>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">

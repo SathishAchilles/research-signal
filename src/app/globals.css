@@ -164,7 +164,7 @@
   :root { --glass-tint: var(--glass-solid); --glass-tint-nav: var(--glass-solid); --glass-tint-elev: var(--glass-solid); }
 }
 
-/* reduced transparency (Chromium 118+) and the manual "Solid panels" toggle (Safari/Firefox users) */
+/* reduced transparency (Chromium 118+); html[data-glass=off] is kept as a solid fallback hook */
 @media (prefers-reduced-transparency: reduce) {
   :root {
     --glass-tint: var(--glass-solid); --glass-tint-nav: var(--glass-solid); --glass-tint-elev: var(--glass-solid);

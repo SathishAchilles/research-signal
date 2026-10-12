@@ -440,6 +440,9 @@ export default function SearchPage({ searchParams }: { searchParams: Promise<Raw
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-8">
       <header className="flex flex-col gap-1">
+        <Link href="/ask" className="micro w-fit hover:text-signal">
+          ← Back to Ask
+        </Link>
         <p className="micro">Research-signal · Library</p>
         <h1 className="font-display text-4xl font-semibold tracking-tight">
           Paper <span className="text-signal-2">search</span>
