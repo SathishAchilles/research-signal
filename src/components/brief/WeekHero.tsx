@@ -1,9 +1,9 @@
 import ReadAloud from "@/components/audio/ReadAloud";
 import { ConeChart } from "@/components/viz/ConeChart";
-import { StatTile } from "@/components/viz/StatTile";
 import { buildBriefSpeech } from "@/lib/audio/speech";
+import { COLORS_UI, VERDICT_ORDER, verdictCounts } from "@/lib/brief/cues";
 import { formatCount, formatPercent } from "@/lib/brief/tokens";
-import type { BriefDoc } from "@/lib/brief/types";
+import type { BriefCard, BriefDoc } from "@/lib/brief/types";
 
 const CONNECTOR = /\s(?:for|in|of|on|and|with)\s/i;
 
@@ -18,12 +18,77 @@ function domainAlias(name: string) {
   return parts.length >= 2 ? parts.map((p) => p[0].toUpperCase()).join("") : head;
 }
 
+const TILE_LABEL: Record<BriefCard["verdict"], string> = { CLIENT: "Share with clients", READ: "Read", SKIP: "Skip" };
+
+// Card ids in the order the page renders them with a #card-<id> anchor: Top 3, then each domain
+// (Top 3 cards there are only a pointer), then Rising. The first of each verdict is a tile's target.
+function anchoredOrder(selection: BriefDoc["selection"]) {
+  const ids = [
+    ...selection.top3,
+    ...selection.domains.flatMap((d) => [d.hero, ...d.standard, ...d.compact]).filter((id) => id && !selection.cards[id]?.inTop3),
+    ...selection.rising,
+  ];
+  return [...new Set(ids)].filter((id): id is string => Boolean(id && selection.cards[id]));
+}
+
+// A decision tile: the count is the headline, the label says what it counts, and when there is
+// something to see the whole tile is a link that jumps to the first such card on the page.
+function DecisionTile({
+  label,
+  value,
+  color,
+  href,
+  hint,
+  tile,
+  jump = "jump to the first paper",
+}: {
+  label: string;
+  value: number;
+  color: string;
+  href: string | null;
+  hint?: string;
+  tile: string;
+  jump?: string;
+}) {
+  const body = (
+    <>
+      <span className="font-display text-[32px] leading-none num" style={{ color }}>
+        {value}
+      </span>
+      <span className="micro mt-2 block">{label}</span>
+      {hint ? <span className="mt-1 block text-xs text-muted-foreground">{hint}</span> : null}
+      {href ? <span className="sr-only">, {jump}</span> : null}
+    </>
+  );
+  const base = "plate relative block min-h-11 rounded-tile border-l-4 p-4 forced-colors:border-l-[CanvasText]";
+  if (!href) {
+    return (
+      <div className={`${base} opacity-70`} style={{ borderLeftColor: color }} data-decision-tile={tile}>
+        {body}
+      </div>
+    );
+  }
+  return (
+    <a
+      href={href}
+      className={`${base} outline-offset-2 transition-colors hover:bg-plate-hover focus-visible:outline-3 focus-visible:outline-solid focus-visible:outline-focus`}
+      style={{ borderLeftColor: color }}
+      data-decision-tile={tile}
+    >
+      {body}
+    </a>
+  );
+}
+
 // The brief's full-width hero: one glass shell holding the week panel (heading, week line, read
-// aloud, stat tiles) beside the attention cones. It is the only glass surface in the hero area;
+// aloud, decision tiles) beside the attention cones. It is the only glass surface in the hero area;
 // the figure stage below it sits on the page background so no figure is under a backdrop-filter.
 export function WeekHero({ doc, status }: { doc: BriefDoc; status: string }) {
   const { selection, prose } = doc;
   const cards = Object.values(selection.cards);
+  const counts = verdictCounts(cards);
+  const order = anchoredOrder(selection);
+  const firstOf = (verdict: BriefCard["verdict"]) => order.find((id) => selection.cards[id].verdict === verdict);
   const week = Number(selection.isoWeek.slice(6));
 
   const risingPcts = selection.rising.map((id) => selection.cards[id]?.evidence.rising_pct).filter((v): v is number => v != null);
@@ -57,12 +122,30 @@ export function WeekHero({ doc, status }: { doc: BriefDoc; status: string }) {
         <div className="min-h-10">
           <ReadAloud title={`Research Signal ${selection.isoWeek}`} segments={buildBriefSpeech(doc)} />
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <StatTile label="Featured" value={String(cards.length)} />
-          <StatTile label="Share with clients" value={String(cards.filter((c) => c.verdict === "CLIENT").length)} />
-          <StatTile label="Hero" value={String(selection.domains.filter((d) => d.hero).length)} />
-          <StatTile label={topRising == null ? "No risers" : "Top rising"} value={topRising == null ? "—" : `UP ${formatPercent(topRising)}`} />
-        </div>
+        <nav aria-label="Jump to papers by decision" className="grid grid-cols-2 gap-3">
+          {VERDICT_ORDER.map((v) => {
+            const first = firstOf(v);
+            return (
+              <DecisionTile
+                key={v}
+                tile={v}
+                label={TILE_LABEL[v]}
+                value={counts[v]}
+                color={COLORS_UI.verdict[v]}
+                href={counts[v] > 0 && first ? `#card-${first}` : null}
+              />
+            );
+          })}
+          <DecisionTile
+            tile="RISING"
+            label="Rising"
+            value={selection.rising.length}
+            color={COLORS_UI.rising}
+            href={selection.rising.length ? "#rising" : null}
+            jump="jump to the Rising section"
+            hint={topRising == null ? undefined : `Top UP ${formatPercent(topRising)}`}
+          />
+        </nav>
       </div>
       {/* Grid rows stretch, so on desktop the plate fills the height of the left column. */}
       <div className="flex min-w-0 flex-col">

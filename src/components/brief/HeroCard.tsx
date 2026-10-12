@@ -3,7 +3,7 @@ import { SpecTable } from "@/components/viz/SpecTable";
 import { meterText } from "@/lib/brief/cues";
 import { formatCount } from "@/lib/brief/tokens";
 import type { ActionKind, BriefCard } from "@/lib/brief/types";
-import { AttentionLine, CardFrame, type CardProse, CueRow, MoreDetails } from "./CardParts";
+import { AttentionLine, CardFrame, type CardProse, CueRow, MoreDetails, TitleLink } from "./CardParts";
 import { CARD_TOUCH } from "./StandardCard";
 
 // The paper's lead figure for the specimen card. BriefCard does not carry it, so the brief page passes
@@ -45,7 +45,9 @@ export function HeroCard({
         <span className="micro">Hero{card.arxivId ? ` · arXiv ${card.arxivId}` : ""}</span>
         <span className="micro num">Score {card.final.toFixed(2)}</span>
       </div>
-      <h3 className="mt-2 font-heading text-xl leading-snug font-semibold">{prose?.headline || card.title}</h3>
+      <h3 className="mt-2 font-heading text-xl leading-snug font-semibold">
+        <TitleLink paperId={card.paperId}>{prose?.headline || card.title}</TitleLink>
+      </h3>
       {prose?.headline ? <p className="mt-0.5 text-sm text-muted-foreground">{card.title}</p> : null}
       <div className="mt-3">
         <CueRow card={card} />

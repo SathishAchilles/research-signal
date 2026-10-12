@@ -92,3 +92,37 @@ export async function search({
   }
   return hits;
 }
+
+export type GroupedHits = {
+  // Paper-backed hits (paper, summary, note), one per paper, in rank order.
+  papers: SearchHit[];
+  // Saved Ask answers, one per distinct title (first-ranked kept), in rank order.
+  answers: SearchHit[];
+  // Everything else (weekly briefs), in rank order.
+  other: SearchHit[];
+};
+
+const titleKey = (title: string) => title.trim().replace(/\s+/g, " ").toLowerCase();
+
+// Presentation grouping for the results page: papers first, then Ask answers deduplicated by title.
+// A paper can match as several docs, and the same question asked twice saves two answers.
+export function groupHits(hits: SearchHit[]): GroupedHits {
+  const grouped: GroupedHits = { papers: [], answers: [], other: [] };
+  const seenPapers = new Set<string>();
+  const seenTitles = new Set<string>();
+  for (const hit of hits) {
+    if (hit.paperId) {
+      if (seenPapers.has(hit.paperId)) continue;
+      seenPapers.add(hit.paperId);
+      grouped.papers.push(hit);
+    } else if (hit.entityType === "answer") {
+      const key = titleKey(hit.title);
+      if (seenTitles.has(key)) continue;
+      seenTitles.add(key);
+      grouped.answers.push(hit);
+    } else {
+      grouped.other.push(hit);
+    }
+  }
+  return grouped;
+}

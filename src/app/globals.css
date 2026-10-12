@@ -91,47 +91,47 @@
   --glass-ease: cubic-bezier(.2,.8,.2,1);
 
   /* canvas */
-  --bg-0: #050D10;
-  --bg-glow-1: #0A2A2E;
-  --bg-glow-peak: #1E6B6E;           /* worst-case backdrop for every contrast figure */
+  --bg-0: #07071A;
+  --bg-glow-1: #17123C;
+  --bg-glow-peak: #4A3A9A;           /* worst-case backdrop for every contrast figure */
 
   /* plates (content) */
-  --plate: rgb(12 26 31 / .92);       /* flattened worst case #102A2D */
-  --plate-solid: #0C1A1F;
-  --plate-hover: #12272C;
-  --plate-rim: rgb(127 224 230 / .14); /* decorative hairline, not meaningful */
+  --plate: rgb(16 15 39 / 0.92);       /* flattened worst case #102A2D */
+  --plate-solid: #100F27;
+  --plate-hover: #18173A;
+  --plate-rim: rgb(180 170 255 / 0.14); /* decorative hairline, not meaningful */
   --rim-w: 1px;                       /* rim width; 2px under prefers-contrast: more */
 
   /* glass (chrome) */
-  --glass-tint: rgb(6 24 30 / .62);
-  --glass-tint-nav: rgb(6 24 30 / .80);
-  --glass-tint-elev: rgb(8 30 36 / .78);
-  --glass-sheen: rgb(158 220 226 / .06);
-  --glass-rim: rgb(127 224 230 / .22);
-  --glass-rim-top: rgb(200 245 247 / .38);
+  --glass-tint: rgb(12 10 36 / 0.64);
+  --glass-tint-nav: rgb(12 10 36 / 0.82);
+  --glass-tint-elev: rgb(17 14 46 / 0.8);
+  --glass-sheen: rgb(203 194 255 / 0.07);
+  --glass-rim: rgb(171 160 255 / 0.24);
+  --glass-rim-top: rgb(226 220 255 / 0.4);
   --glass-hi: rgb(255 255 255 / .14);
-  --glass-solid: #0F2227;
+  --glass-solid: #141233;
   --glass-filter: blur(16px) saturate(170%) brightness(.95);
   --glass-filter-nav: blur(14px) saturate(170%) brightness(.95);
   --glass-filter-elev: blur(24px) saturate(190%) brightness(.95);
   --glass-shadow: 0 12px 40px rgb(0 0 0 / .45);
   --glass-shadow-elev: 0 24px 64px rgb(0 0 0 / .55);
-  --glow-signal: 0 0 24px rgb(63 224 208 / .25); /* figure-stage callout nodes + linked card only */
+  --glow-signal: 0 0 24px rgb(167 139 250 / 0.3); /* figure-stage callout nodes + linked card only */
 
   /* text */
-  --text: #E6F4F3;
-  --text-muted: #9DB8BC;
-  --micro: #7FD9DD;
-  --signal: #3FE0D0;
-  --signal-2: #3FB8BD;
-  --rule: #4FA3A8;
-  --chip-border: #5E9EA3;             /* meaningful borders: signal chips, inputs */
-  --focus: #7FDBFF;
+  --text: #EEEDFB;
+  --text-muted: #B3AFD9;
+  --micro: #BCAEFF;
+  --signal: #A995FF;
+  --signal-2: #7E9BFF;
+  --rule: #8279CC;
+  --chip-border: #8C86CC;             /* meaningful borders: signal chips, inputs */
+  --focus: #FFA8F0;
 
   /* cues (mirror COLORS_UI in src/lib/brief/cues.ts) */
   --verdict-client: #FF8A50;
   --verdict-read: #56B4E9;
-  --verdict-skip: #A7AEB8;
+  --verdict-skip: #A9A8BC;
   --rising: #3DDC97;
 
   /* shadcn semantic remap: ui/* inherit the palette with almost no edits */
@@ -142,18 +142,18 @@
   --popover: var(--glass-solid);      /* select/tooltip popups stay solid (no extra blur layer) */
   --popover-foreground: var(--text);
   --primary: var(--signal);
-  --primary-foreground: #03201D;      /* 10.41:1 on #3FE0D0 */
+  --primary-foreground: #140A33;      /* 10.41:1 on #3FE0D0 */
   --secondary: var(--plate-hover);
   --secondary-foreground: var(--text);
   --muted: var(--plate-hover);
   --muted-foreground: var(--text-muted);
-  --accent: #17333A;                  /* shadcn hover fill */
+  --accent: #221F4A;                  /* shadcn hover fill */
   --accent-foreground: var(--text);
-  --destructive: #FF6B6B;
-  --border: #1F3A40;
+  --destructive: #FF6B81;
+  --border: #2A2752;
   --input: var(--chip-border);        /* input boundary >= 3:1 (WCAG 1.4.11) */
   --ring: var(--focus);
-  --chart-1: #3FE0D0; --chart-2: #3FB8BD; --chart-3: #56B4E9; --chart-4: #3DDC97; --chart-5: #A7AEB8;
+  --chart-1: #A995FF; --chart-2: #7E9BFF; --chart-3: #56B4E9; --chart-4: #3DDC97; --chart-5: #A9A8BC;
   /* sidebar (shadcn, unused by the app; values carried over from the previous .dark block) */
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
@@ -193,7 +193,7 @@
     --plate: var(--plate-solid);
     --glass-filter: none; --glass-filter-nav: none; --glass-filter-elev: none;
     --glass-rim: var(--text-muted); --glass-rim-top: var(--text-muted); --plate-rim: var(--chip-border);
-    --text-muted: #B9D0D3;
+    --text-muted: #CBC8EA;
     --glow-signal: none;
     --rim-w: 2px;
   }
@@ -260,7 +260,7 @@
 }
 
 @utility glass-chip {          /* domain chips, filter pills, badges, action buttons: NO backdrop-filter */
-  background: rgb(127 224 230 / .08);
+  background: rgb(171 160 255 / .09);
   border: var(--rim-w, 1px) solid var(--glass-rim);
   border-radius: 9999px;
 }

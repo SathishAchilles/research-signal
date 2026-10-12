@@ -12,6 +12,7 @@ import { getSourceSecret } from "@/lib/sources/registry";
 import { writeHfSignals } from "@/lib/sources/hf";
 import { normalizeTitle } from "@/lib/sources/openreview";
 import { httpGet } from "@/lib/sources/types";
+import type { AskCitation } from "./answer";
 import type { RoutedIntent } from "./route-intent";
 
 export const ASK_TOOL_NAMES = [
@@ -52,7 +53,26 @@ export type PaperRef = {
   evidence: Evidence;
   // Serialised tool output about this paper: numbers attributed to a cited paper must appear here.
   data: string[];
+  // Citation fields for the client-safe source list, set by the tools that read them.
+  arxivId?: string | null;
+  urlAbs?: string | null;
+  authors?: string[];
 };
+
+const CITED_AUTHORS = 3;
+
+// The citation saved with an answer for one of its refs.
+export function citationOf(entry: PaperRef): AskCitation {
+  return {
+    ref: entry.ref,
+    paperId: entry.paperId,
+    title: entry.title,
+    rung: entry.rung,
+    ...(entry.arxivId !== undefined ? { arxivId: entry.arxivId } : {}),
+    ...(entry.urlAbs !== undefined ? { urlAbs: entry.urlAbs } : {}),
+    ...(entry.authors?.length ? { authors: entry.authors } : {}),
+  };
+}
 
 export type AskContext = {
   routed: RoutedIntent;
@@ -89,7 +109,24 @@ export function stageFor(ctx: Pick<AskContext, "requestId">, stage: string): str
   return ctx.requestId ? `${stage}#${ctx.requestId}` : stage;
 }
 
-type RefInput = { paperId: string; title: string; rung?: Rung | null; relevant?: boolean; evidence?: Evidence };
+type RefInput = {
+  paperId: string;
+  title: string;
+  rung?: Rung | null;
+  relevant?: boolean;
+  evidence?: Evidence;
+  arxivId?: string | null;
+  urlAbs?: string | null;
+  authors?: string[];
+};
+
+function citationFields(input: RefInput): Pick<PaperRef, "arxivId" | "urlAbs" | "authors"> {
+  return {
+    ...(input.arxivId !== undefined ? { arxivId: input.arxivId } : {}),
+    ...(input.urlAbs !== undefined ? { urlAbs: input.urlAbs } : {}),
+    ...(input.authors?.length ? { authors: input.authors.slice(0, CITED_AUTHORS) } : {}),
+  };
+}
 
 function register(ctx: AskContext, input: RefInput): PaperRef {
   const existing = ctx.byPaper.get(input.paperId);
@@ -97,6 +134,7 @@ function register(ctx: AskContext, input: RefInput): PaperRef {
     if (input.rung !== undefined) existing.rung = input.rung;
     if (input.relevant) existing.relevant = true;
     if (input.evidence) existing.evidence = { ...existing.evidence, ...input.evidence };
+    Object.assign(existing, citationFields(input));
     return existing;
   }
   const entry: PaperRef = {
@@ -107,6 +145,7 @@ function register(ctx: AskContext, input: RefInput): PaperRef {
     relevant: input.relevant ?? false,
     evidence: input.evidence ?? {},
     data: [],
+    ...citationFields(input),
   };
   ctx.refs.set(entry.ref, entry);
   ctx.byPaper.set(entry.paperId, entry);
@@ -217,6 +256,7 @@ async function getPapers(ctx: AskContext, ids: string[], markRelevant = true) {
   const rows = await db.execute<
     EvidenceRow & {
       id: string;
+      arxiv_id: string | null;
       title: string;
       abstract: string;
       authors: string[];
@@ -231,7 +271,7 @@ async function getPapers(ctx: AskContext, ids: string[], markRelevant = true) {
       domains: { domain: string; verdict: string | null; final: number | null; signalType: string | null; clientAngle: string | null; riskFlags: string[] }[] | null;
     }
   >(sql`
-    select p.id, p.title, p.abstract, p.authors, p.source, p.url_abs,
+    select p.id, p.arxiv_id, p.title, p.abstract, p.authors, p.source, p.url_abs,
       coalesce(p.announced_at, p.submitted_at) as published,
       e.rung, e.hf_upvotes, e.hf_comments, e.github_repo, e.github_stars, e.linked_models,
       e.linked_spaces, e.s2_citations, e.venue, e.or_venue, e.or_decision, e.rising,
@@ -248,7 +288,16 @@ async function getPapers(ctx: AskContext, ids: string[], markRelevant = true) {
 
   return {
     papers: rows.map((row) => {
-      const entry = register(ctx, { paperId: row.id, title: row.title, rung: row.rung, relevant: markRelevant, evidence: evidenceOf(row) });
+      const entry = register(ctx, {
+        paperId: row.id,
+        title: row.title,
+        rung: row.rung,
+        relevant: markRelevant,
+        evidence: evidenceOf(row),
+        arxivId: row.arxiv_id,
+        urlAbs: row.url_abs,
+        authors: row.authors,
+      });
       return about(entry, {
         ref: entry.ref,
         title: row.title,
@@ -520,7 +569,17 @@ async function liveSearch(ctx: AskContext, q: string) {
     papers: arxivIds.flatMap((arxivId) => {
       const row = byArxiv.get(arxivId);
       if (!row) return [];
-      const entry = register(ctx, { paperId: row.id, title: row.title, rung: row.rung, relevant: true, evidence: evidenceOf(row) });
+      const item = items.find((p) => p.id === arxivId);
+      const entry = register(ctx, {
+        paperId: row.id,
+        title: row.title,
+        rung: row.rung,
+        relevant: true,
+        evidence: evidenceOf(row),
+        arxivId: row.arxiv_id,
+        urlAbs: `https://arxiv.org/abs/${row.arxiv_id}`,
+        authors: (item?.authors ?? []).map((a) => a.name ?? "").filter(Boolean),
+      });
       return [
         about(entry, {
           ref: entry.ref,

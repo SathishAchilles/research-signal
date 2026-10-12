@@ -6,7 +6,6 @@ import { DomainChipsBar } from "@/components/brief/DomainChipsBar";
 import { DomainSection } from "@/components/brief/DomainSection";
 import { SourceHealthFooter } from "@/components/brief/SourceHealthFooter";
 import { StandardCard } from "@/components/brief/StandardCard";
-import { Top3Strip } from "@/components/brief/Top3Strip";
 import { WeekHero } from "@/components/brief/WeekHero";
 import { briefFigures, currentActions, loadBrief } from "@/lib/brief/load";
 
@@ -39,9 +38,8 @@ async function Brief({ params }: Pick<PageProps<"/brief/[isoWeek]">, "params">) 
   return (
     <BriefShell>
       <WeekHero doc={doc} status={stored.status} />
-      <BriefHero doc={doc} figures={figures} />
+      <BriefHero doc={doc} figures={figures} actions={actions} />
       <DomainChipsBar selection={selection} />
-      <Top3Strip brief={doc} actions={actions} />
       {selection.domains.map((domain) => (
         <DomainSection key={domain.slug} brief={doc} domain={domain} actions={actions} figures={figures} />
       ))}

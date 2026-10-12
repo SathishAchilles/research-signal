@@ -18,6 +18,9 @@ const badgeVariants = cva(
         ghost:
           "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
         link: "text-primary underline-offset-4 hover:underline",
+        // Text color comes from the caller (VerdictPill sets COLORS_UI.verdict); rim and fill derive from it.
+        verdict:
+          "rounded-full border-current/45 bg-current/10 font-mono text-[11px] tracking-[.08em] forced-colors:border-[CanvasText]",
       },
     },
     defaultVariants: {

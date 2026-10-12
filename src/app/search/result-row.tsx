@@ -1,8 +1,9 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { VerdictPill } from "@/components/brief/VerdictPill";
 import { Badge } from "@/components/ui/badge";
-import type { SignalType } from "@/lib/pipeline/rank";
+import type { SignalType, Verdict } from "@/lib/pipeline/rank";
 
 export type ResultView = {
   id: number;
@@ -12,7 +13,7 @@ export type ResultView = {
   publishedAt: string | null;
   attention: number | null;
   rung: string | null;
-  verdict: string | null;
+  verdict: Verdict | null;
   domain: string | null;
   myAction: string | null;
   clientTag: string | null;
@@ -127,6 +128,9 @@ export function RowThumb({
   );
 }
 
+// Display names for the action enum; the stored value stays CLIENT.
+export const ACTION_TEXT: Record<string, string> = { READ: "Read", CLIENT: "Share with clients", SKIP: "Skip" };
+
 const compact = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k` : String(n));
 
 export function ResultRow({ hit }: { hit: ResultView }) {
@@ -165,19 +169,54 @@ export function ResultRow({ hit }: { hit: ResultView }) {
           )}
         </div>
         <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-          {hit.verdict && <Badge variant={hit.verdict === "CLIENT" ? "default" : "secondary"}>{hit.verdict}</Badge>}
+          {hit.verdict && <VerdictPill verdict={hit.verdict} />}
           {hit.rung && <Badge variant="outline">{hit.rung}</Badge>}
           {hit.domain && <span>{hit.domain}</span>}
           {date && <span className="num">· {date}</span>}
           {signals.length > 0 && <span className="num">· {signals.join(" · ")}</span>}
           {hit.myAction && (
             <span>
-              · you: {hit.myAction}
+              · you: {ACTION_TEXT[hit.myAction] ?? hit.myAction}
               {hit.clientTag ? ` (${hit.clientTag})` : ""}
             </span>
           )}
         </div>
       </div>
+    </li>
+  );
+}
+
+export type AnswerView = { id: number; threadId: string; title: string; savedAt: string | null };
+
+// A saved Ask answer: the whole row links back to its thread.
+export function AnswerRow({ answer }: { answer: AnswerView }) {
+  const date = answer.savedAt ? answer.savedAt.slice(0, 10) : null;
+  return (
+    <li>
+      <Link
+        href={`/ask?thread=${answer.threadId}`}
+        data-answer-thread={answer.threadId}
+        className="flex min-h-11 items-center gap-3 px-4 py-2.5 transition-colors outline-offset-[-3px] hover:bg-plate-hover focus-visible:outline-3 focus-visible:outline-solid focus-visible:outline-focus"
+      >
+        <svg
+          viewBox="0 0 16 16"
+          className="size-4 shrink-0 text-signal-2"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z" />
+        </svg>
+        <span className="min-w-0 flex-1 font-medium leading-snug break-words">{answer.title}</span>
+        {date && <span className="num shrink-0 text-xs text-muted-foreground">{date}</span>}
+        <span aria-hidden className="shrink-0 text-xs text-signal">
+          <span className="max-sm:hidden">Open thread </span>→
+        </span>
+      </Link>
     </li>
   );
 }

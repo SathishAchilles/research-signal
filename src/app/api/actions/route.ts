@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { verifyAction } from "@/lib/brief/actions-link";
-import { ACTION_KINDS, recordAction } from "@/lib/brief/log";
+import { ACTION_KINDS, recordAction, recordAskSave } from "@/lib/brief/log";
 import { readSession, SESSION_COOKIE } from "@/lib/auth/session";
 
 const bodySchema = z.union([
@@ -12,6 +12,8 @@ const bodySchema = z.union([
     origin: z.enum(["web", "ask"]).default("web"),
     note: z.string().max(4000).optional(),
     clientTag: z.string().max(80).optional(),
+    // Ask's "Save to log": keeps an existing action and appends the note instead of replacing it.
+    merge: z.literal(true).optional(),
   }),
 ]);
 
@@ -43,8 +45,13 @@ export async function POST(request: NextRequest) {
   if (!(await readSession(request.cookies.get(SESSION_COOKIE)?.value))) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  const { paperId, action, origin, note, clientTag } = parsed.data;
+  const { paperId, action, origin, note, clientTag, merge } = parsed.data;
   try {
+    if (merge) {
+      if (action !== "CLIENT" || !note?.trim()) return NextResponse.json({ error: "invalid request" }, { status: 400 });
+      const saved = await recordAskSave(paperId, note);
+      return NextResponse.json({ ok: true, action, saved, changed: saved !== "already" });
+    }
     const result = await recordAction({ paperId, action, origin, note, clientTag });
     return NextResponse.json({ ok: true, action, changed: result.changed });
   } catch (error) {

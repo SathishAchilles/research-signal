@@ -30,7 +30,7 @@ import {
 import { type Confidence, confidence } from "@/lib/ask/grade";
 import { playbookFor, systemPrompt } from "@/lib/ask/playbooks";
 import { type RoutedIntent, routeIntent } from "@/lib/ask/route-intent";
-import { type AskContext, type AskTools, askTools, createAskContext, initialSearch, stageFor } from "@/lib/ask/tools";
+import { type AskContext, type AskTools, askTools, citationOf, createAskContext, initialSearch, stageFor } from "@/lib/ask/tools";
 import { LlmCreditsExhausted, llmCall } from "@/lib/llm/call";
 import { chatModel } from "@/lib/llm/openrouter";
 import { upsertSearchDoc } from "@/lib/search/index";
@@ -116,7 +116,7 @@ function evidenceOf(ctx: AskContext): AskEvidence {
 function citationsOf(ctx: AskContext, text: string): AskCitation[] {
   return citedRefs(text).flatMap((ref) => {
     const entry = ctx.refs.get(ref);
-    return entry ? [{ ref, paperId: entry.paperId, title: entry.title, rung: entry.rung }] : [];
+    return entry ? [citationOf(entry)] : [];
   });
 }
 

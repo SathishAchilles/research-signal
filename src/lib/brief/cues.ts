@@ -20,6 +20,14 @@ export const COLORS_UI = {
 } as const;
 
 export const VERDICT_LABEL = { CLIENT: "SHARE WITH CLIENTS", READ: "READ", SKIP: "SKIP" } as const;
+export const VERDICT_ORDER = ["CLIENT", "READ", "SKIP"] as const satisfies readonly BriefCard["verdict"][];
+
+// How many cards carry each verdict, in VERDICT_ORDER; every verdict is present, zero included.
+export function verdictCounts(cards: readonly Pick<BriefCard, "verdict">[]): Record<BriefCard["verdict"], number> {
+  const counts = { CLIENT: 0, READ: 0, SKIP: 0 };
+  for (const c of cards) counts[c.verdict] += 1;
+  return counts;
+}
 export const RUNG_LEVEL = { LAB: 1, CODE: 2, MODEL: 3, PEER: 4 } as const;
 export const SIGNAL_BORDER = { BENCH: "solid", EVAL: "dashed", REFRAME: "dotted", METHOD: "double" } as const;
 export const meterText = (rung: BriefCard["rung"]) =>

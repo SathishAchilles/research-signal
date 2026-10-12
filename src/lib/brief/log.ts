@@ -66,6 +66,40 @@ export async function recordAction(input: {
   return { id: row.id, changed: true };
 }
 
+const NOTE_MAX = 4000;
+
+export type AskSaveResult = "added" | "upgraded" | "noted" | "already";
+
+// The note with `line` appended on a new line; unchanged when the line is already there or would not fit.
+export function appendNote(note: string | null, line: string): string | null {
+  const current = note?.trim() ?? "";
+  if (!current) return line.slice(0, NOTE_MAX);
+  if (current.split("\n").some((l) => l.trim() === line)) return current;
+  const next = `${current}\n${line}`;
+  return next.length > NOTE_MAX ? current : next;
+}
+
+// Saves a paper cited by an Ask answer without overwriting the consultant's own call: a paper with
+// no action becomes Share with clients, Read is upgraded to Share with clients, and Share with
+// clients keeps its action. The "From Ask: <title>" line is appended to any existing note (never
+// replacing it), and a Skip is left untouched.
+export async function recordAskSave(paperId: string, line: string): Promise<AskSaveResult> {
+  const latest = await latestAction(paperId);
+  if (latest?.action === "SKIP") return "already";
+  const note = appendNote(latest?.note ?? null, line.trim());
+  if (!latest || latest.action === "READ") {
+    const clientTag = latest?.client_tag ?? null;
+    await db.insert(actions).values({ paperId, action: "CLIENT", origin: "ask", note, clientTag });
+    await setPaperSearchFacets([paperId], { userAction: "CLIENT" });
+    await indexNote(paperId, note, clientTag, "CLIENT");
+    return latest ? "upgraded" : "added";
+  }
+  if (note === (latest.note?.trim() ?? "")) return "already";
+  await db.execute(sql`update research_signal.actions set note = ${note} where id = ${latest.id}`);
+  await indexNote(paperId, note, latest.client_tag, latest.action);
+  return "noted";
+}
+
 // Edits the note and client tag on the paper's current action, allowed for READ and CLIENT only.
 export async function updateActionNote(paperId: string, note: string, clientTag: string): Promise<{ ok: boolean; error?: string }> {
   const latest = await latestAction(paperId);

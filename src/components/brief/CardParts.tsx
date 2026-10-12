@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { attentionText, COLORS_UI } from "@/lib/brief/cues";
 import { formatPercent } from "@/lib/brief/tokens";
@@ -17,11 +18,25 @@ export type CardProse = { headline?: string; lede?: string; clientAngle?: string
 
 // Focusable card shell used by every tier; j/k move between [data-card] elements.
 // scroll-mt-32 clears the sticky nav and domain bar; data-linked is set by the figure-stage sync.
-export function CardFrame({ card, action, children, className = "" }: { card: CardLike; action: ActionKind | null; children: ReactNode; className?: string }) {
+// A compact frame (data-compact) leaves the action row to its children, which place it inline.
+export function CardFrame({
+  card,
+  action,
+  children,
+  className = "",
+  compact = false,
+}: {
+  card: CardLike;
+  action: ActionKind | null;
+  children: ReactNode;
+  className?: string;
+  compact?: boolean;
+}) {
   return (
     <article
       id={card.cardId ? `card-${card.cardId}` : undefined}
       data-card
+      data-compact={compact || undefined}
       data-paper-id={card.paperId}
       tabIndex={0}
       className={cn(
@@ -31,10 +46,28 @@ export function CardFrame({ card, action, children, className = "" }: { card: Ca
     >
       <VerdictBar verdict={card.verdict} />
       {children}
-      <div className="mt-2">
-        <CardActions paperId={card.paperId} initial={action} />
-      </div>
+      {compact ? null : (
+        <div className="mt-2">
+          <CardActions paperId={card.paperId} initial={action} />
+        </div>
+      )}
     </article>
+  );
+}
+
+// The card title as a plain link to the paper page. The card itself stays the j/k focus target; with the
+// link focused, r/c/s still act on its card (closest [data-card]) and Enter follows the link.
+export function TitleLink({ paperId, children, className = "" }: { paperId: string; children: ReactNode; className?: string }) {
+  return (
+    <Link
+      href={`/paper/${paperId}`}
+      className={cn(
+        "rounded-[2px] decoration-signal/70 underline-offset-4 hover:text-signal hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
+        className,
+      )}
+    >
+      {children}
+    </Link>
   );
 }
 

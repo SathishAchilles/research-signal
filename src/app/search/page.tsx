@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import {
   MAX_SEARCH_LIMIT,
   SEARCH_SORTS,
+  groupHits,
   search,
   searchFiltersSchema,
   type SearchFilters,
@@ -21,7 +22,7 @@ import { CompactRow } from "@/components/brief/CompactRow";
 import type { CardLike } from "@/components/brief/CardParts";
 import type { ActionKind } from "@/lib/brief/types";
 import type { Rung, SignalType, Verdict } from "@/lib/pipeline/rank";
-import { ResultRow, RowThumb, type ResultView } from "./result-row";
+import { ACTION_TEXT, AnswerRow, ResultRow, RowThumb, type AnswerView, type ResultView } from "./result-row";
 
 type RawParams = Record<string, string | string[] | undefined>;
 type Params = {
@@ -138,6 +139,19 @@ async function paperDetails(paperIds: string[], domainId: number | undefined): P
   return new Map(rows.map((r) => [r.id, r]));
 }
 
+// Answer docs are keyed by the assistant message id; the thread is what /ask opens.
+async function answerThreads(messageIds: string[]): Promise<Map<string, string>> {
+  const valid = messageIds.filter((id) => /^[0-9a-f-]{36}$/i.test(id));
+  if (valid.length === 0) return new Map();
+  const ids: SQL = sql.join(
+    valid.map((id) => sql`${id}::uuid`),
+    sql`, `,
+  );
+  const rows = await db.execute<{ id: string; thread_id: string }>(sql`
+    select m.id, m.thread_id from research_signal.ask_messages m where m.id in (${ids})`);
+  return new Map(rows.map((r) => [r.id, r.thread_id]));
+}
+
 function githubUrl(repo: string | null): string | null {
   const value = repo?.trim();
   if (!value) return null;
@@ -221,20 +235,18 @@ async function Results({ params }: { params: Params }) {
       </p>
     );
   }
-  const paperIds = [...new Set(hits.flatMap((h) => (h.paperId ? [h.paperId] : [])))];
-  const details = await paperDetails(paperIds, filters.domainId);
+  // Answers whose message row is gone would link nowhere, so they are dropped before grouping.
+  const threads = await answerThreads(hits.filter((h) => h.entityType === "answer").map((h) => h.entityId));
+  const grouped = groupHits(hits.filter((h) => h.entityType !== "answer" || threads.has(h.entityId)));
+  const details = await paperDetails(
+    grouped.papers.map((h) => h.paperId!),
+    filters.domainId,
+  );
 
   const tag = params.client.toLowerCase();
-  const seen = new Set<string>();
-  const views = hits
-    .filter((hit) => {
-      if (!hit.paperId) return true;
-      if (seen.has(hit.paperId)) return false;
-      seen.add(hit.paperId);
-      return true;
-    })
+  const papers = grouped.papers
     .map((hit) => {
-      const detail = hit.paperId ? details.get(hit.paperId) : undefined;
+      const detail = details.get(hit.paperId!);
       return { view: toView(hit, detail), card: toCard(hit, detail), action: detail?.my_action ?? null };
     })
     // search_docs.verdict is the paper's best verdict across domains; with a domain filter the row shows that
@@ -242,39 +254,86 @@ async function Results({ params }: { params: Params }) {
     .filter(({ view }) => !params.verdict || view.verdict === params.verdict)
     .filter(({ view }) => !tag || (view.myAction === "CLIENT" && view.clientTag?.toLowerCase() === tag))
     .slice(0, PAGE_SIZE);
+  // Answers and briefs carry no verdict or client tag, so those filters leave only papers.
+  const paperOnly = Boolean(params.verdict || tag);
+  const answers: AnswerView[] = paperOnly
+    ? []
+    : grouped.answers.map((hit) => ({
+        id: hit.id,
+        threadId: threads.get(hit.entityId)!,
+        title: hit.title,
+        savedAt: hit.publishedAt,
+      }));
+  const others = paperOnly ? [] : grouped.other.map((hit) => toView(hit, undefined));
 
-  if (views.length === 0) return <p className="plate px-4 py-6 text-sm text-muted-foreground">No results.</p>;
+  if (papers.length === 0 && answers.length === 0 && others.length === 0) {
+    return <p className="plate px-4 py-6 text-sm text-muted-foreground">No results.</p>;
+  }
   return (
     <>
       <p className="micro" aria-live="polite">
-        <span className="num text-foreground">{views.length}</span> result{views.length === 1 ? "" : "s"}
+        <span className="num text-foreground">{papers.length}</span> paper{papers.length === 1 ? "" : "s"}
+        {params.q ? (
+          <>
+            {" for "}
+            <span className="normal-case tracking-normal text-foreground">&ldquo;{params.q}&rdquo;</span>
+          </>
+        ) : null}
       </p>
-      {/* One plate holds every row; rows are divided, never glass. The CompactRow's own card
-          surface is flattened into the plate (focus outline, data-card and tabIndex untouched). */}
-      <ul className="plate divide-y divide-border">
-        {views.map(({ view, card, action }) =>
-          card ? (
-            <li
-              key={view.id}
-              className="flex items-start gap-3 py-1 pl-4 transition-colors hover:bg-plate-hover [&_[data-card]]:min-w-0 [&_[data-card]]:flex-1 [&_[data-card]]:rounded-none [&_[data-card]]:border-0 [&_[data-card]]:bg-transparent"
-            >
-              <RowThumb title={view.title} figureUrl={view.figureUrl} signalType={view.signalType} />
-              <CompactRow card={card} action={action}>
-                <p className="mt-0.5 text-sm text-muted-foreground lg:text-xs">
-                  {[view.domain, view.publishedAt?.slice(0, 10)].filter(Boolean).join(" · ")}
-                  {view.clientTag ? ` · client ${view.clientTag}` : ""}
-                  {" · "}
-                  <Link href={`/paper/${card.paperId}`} className="text-signal underline hover:text-foreground">
-                    Open
-                  </Link>
-                </p>
-              </CompactRow>
-            </li>
-          ) : (
-            <ResultRow key={view.id} hit={view} />
-          ),
-        )}
-      </ul>
+      {papers.length === 0 ? (
+        <p className="plate px-4 py-6 text-sm text-muted-foreground">No papers match.</p>
+      ) : (
+        /* One plate holds every row; rows are divided, never glass. The CompactRow's own card
+           surface is flattened into the plate (focus outline, data-card and tabIndex untouched). */
+        <ul className="plate divide-y divide-border">
+          {papers.map(({ view, card, action }) =>
+            card ? (
+              <li
+                key={view.id}
+                className="flex items-start gap-3 py-1 pl-4 transition-colors hover:bg-plate-hover [&_[data-card]]:min-w-0 [&_[data-card]]:flex-1 [&_[data-card]]:rounded-none [&_[data-card]]:border-0 [&_[data-card]]:bg-transparent"
+              >
+                <RowThumb title={view.title} figureUrl={view.figureUrl} signalType={view.signalType} />
+                <CompactRow card={card} action={action}>
+                  <p className="mt-0.5 text-sm text-muted-foreground lg:text-xs">
+                    {[view.domain, view.publishedAt?.slice(0, 10)].filter(Boolean).join(" · ")}
+                    {view.clientTag ? ` · client ${view.clientTag}` : ""}
+                    {" · "}
+                    <Link href={`/paper/${card.paperId}`} className="text-signal underline hover:text-foreground">
+                      Open
+                    </Link>
+                  </p>
+                </CompactRow>
+              </li>
+            ) : (
+              <ResultRow key={view.id} hit={view} />
+            ),
+          )}
+        </ul>
+      )}
+      {answers.length > 0 && (
+        <section aria-labelledby="ask-answers-heading" className="mt-4 flex flex-col gap-3">
+          <h2 id="ask-answers-heading" className="micro">
+            From your Ask answers <span className="num text-foreground">· {answers.length}</span>
+          </h2>
+          <ul className="plate divide-y divide-border">
+            {answers.map((answer) => (
+              <AnswerRow key={answer.id} answer={answer} />
+            ))}
+          </ul>
+        </section>
+      )}
+      {others.length > 0 && (
+        <section aria-labelledby="other-matches-heading" className="mt-4 flex flex-col gap-3">
+          <h2 id="other-matches-heading" className="micro">
+            Other matches
+          </h2>
+          <ul className="plate divide-y divide-border">
+            {others.map((view) => (
+              <ResultRow key={view.id} hit={view} />
+            ))}
+          </ul>
+        </section>
+      )}
     </>
   );
 }
@@ -309,122 +368,149 @@ function daysAgo(days: number): string {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
-const asOptions = (values: readonly string[]) => values.map((v) => ({ value: v, label: v }));
+const asOptions = (values: readonly string[], labels: Record<string, string> = {}) =>
+  values.map((v) => ({ value: v, label: labels[v] ?? v }));
+
+// Enum values stay as stored (CLIENT); only the visible label changes.
+const VERDICT_TEXT: Record<string, string> = { CLIENT: "Share with clients", READ: "Read", SKIP: "Skip" };
+
+type FacetOptions = Awaited<ReturnType<typeof facetOptions>>;
+
+// The filter and preset forms. Rendered once as the lg sidebar (with the query box) and once as the
+// collapsible panel under the results below lg (query carried as a hidden field; the box sits above the results).
+function FilterForms({ params, options, withQuery }: { params: Params; options: FacetOptions; withQuery: boolean }) {
+  const domainOptions = options.domains.map((d) => ({ value: String(d.id), label: d.name }));
+  const weekAgo = daysAgo(7);
+  return (
+    <div className="flex flex-col gap-5">
+      <form action="/search" className="flex flex-col gap-3">
+        {withQuery ? (
+          <Input name="q" defaultValue={params.q} placeholder="Search" aria-label="Search query" />
+        ) : (
+          params.q && <input type="hidden" name="q" value={params.q} />
+        )}
+        <Select name="domain" label="Domain" value={params.domain} options={domainOptions} />
+        <div className="grid grid-cols-2 gap-2">
+          <label className={LABEL_CLASS}>
+            <span className="micro">From</span>
+            <Input type="date" name="since" defaultValue={params.since} />
+          </label>
+          <label className={LABEL_CLASS}>
+            <span className="micro">To</span>
+            <Input type="date" name="until" defaultValue={params.until} />
+          </label>
+        </div>
+        <Select name="source" label="Source" value={params.source} options={asOptions(options.sources)} />
+        <Select name="rung" label="Minimum rung" value={params.rung} options={asOptions(rung.enumValues)} />
+        <Select name="verdict" label="Verdict" value={params.verdict} options={asOptions(verdict.enumValues, VERDICT_TEXT)} />
+        <Select name="action" label="My action" value={params.action} options={asOptions(actionKind.enumValues, ACTION_TEXT)} />
+        <Select
+          name="code"
+          label="Has code"
+          value={params.code}
+          options={[
+            { value: "yes", label: "Yes" },
+            { value: "no", label: "No" },
+          ]}
+        />
+        {params.client && <input type="hidden" name="client" value={params.client} />}
+        <input type="hidden" name="sort" value={params.sort} />
+        <div className="flex gap-2">
+          <Button type="submit" size="sm" className="touch:h-11">
+            Apply
+          </Button>
+          <Link href="/search" className={cn(buttonVariants({ size: "sm", variant: "ghost" }), "touch:h-11")}>
+            Reset
+          </Link>
+        </div>
+      </form>
+
+      <div className="flex flex-col gap-3 border-t border-rule/40 pt-4">
+        <h3 className="micro">Presets</h3>
+        <form action="/search" className="flex flex-col gap-2 text-sm">
+          <span>What&apos;s new in</span>
+          <select
+            name="domain"
+            aria-label="Domain"
+            defaultValue={params.domain || domainOptions[0]?.value}
+            className={SELECT_CLASS}
+            required
+          >
+            {domainOptions.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <span>since</span>
+          <Input type="date" name="since" aria-label="Since" defaultValue={params.since || weekAgo} required />
+          <input type="hidden" name="sort" value="attention" />
+          <Button type="submit" size="sm" variant="outline" className="touch:h-11">
+            Show
+          </Button>
+        </form>
+        <form action="/search" className="flex flex-col gap-2 text-sm">
+          <span>Flagged for client</span>
+          {options.tags.length > 0 ? (
+            <select
+              name="client"
+              aria-label="Client tag"
+              defaultValue={params.client || options.tags[0]}
+              className={SELECT_CLASS}
+              required
+            >
+              {options.tags.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <Input name="client" placeholder="Client tag" aria-label="Client tag" required />
+          )}
+          <input type="hidden" name="sort" value="attention" />
+          <Button type="submit" size="sm" variant="outline" className="touch:h-11">
+            Show
+          </Button>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 async function SearchView({ searchParams }: { searchParams: Promise<RawParams> }) {
   await connection();
   const params = readParams(await searchParams);
   const options = await facetOptions();
-  const domainOptions = options.domains.map((d) => ({ value: String(d.id), label: d.name }));
-  const weekAgo = daysAgo(7);
   const activeFilters = PARAM_KEYS.filter((key) => key !== "q" && params[key]).length;
+  const carried = PARAM_KEYS.filter((key) => key !== "q" && params[key]);
 
+  // DOM order is the reading order at each width: the lg sidebar precedes the results, and below lg the
+  // results come first and the Filters panel follows them. Only one of the two panels is ever displayed.
   return (
-    <div className="grid items-start gap-6 md:grid-cols-[15rem_1fr]">
-      <aside aria-label="Search filters" className="glass-base p-4">
-        {/* Below md the panel folds behind a disclosure so a phone shows results first. From md up it is
-            always open: the summary hides and ::details-content is forced visible. A browser without
-            ::details-content keeps the summary, so the panel is still reachable there. */}
-        <details
-          open={!params.q && activeFilters === 0}
-          className="group/filters md:[&::details-content]:block md:[&::details-content]:[content-visibility:visible]"
-        >
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 touch:min-h-11 supports-[selector(::details-content)]:md:hidden [&::-webkit-details-marker]:hidden">
-            <span className="micro">
-              Filters and presets
-              {activeFilters ? <span className="num text-foreground"> · {activeFilters} on</span> : null}
-            </span>
-            <svg
-              viewBox="0 0 16 16"
-              className="size-4 transition-transform group-open/filters:rotate-180"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </summary>
-          <div className="flex flex-col gap-5 pt-4 supports-[selector(::details-content)]:md:pt-0">
-            <h2 className="micro max-md:sr-only">Filters</h2>
-            <form action="/search" className="flex flex-col gap-3">
-              <Input name="q" defaultValue={params.q} placeholder="Search" aria-label="Search query" />
-              <Select name="domain" label="Domain" value={params.domain} options={domainOptions} />
-              <div className="grid grid-cols-2 gap-2 md:max-lg:grid-cols-1">
-                <label className={LABEL_CLASS}>
-                  <span className="micro">From</span>
-                  <Input type="date" name="since" defaultValue={params.since} />
-                </label>
-                <label className={LABEL_CLASS}>
-                  <span className="micro">To</span>
-                  <Input type="date" name="until" defaultValue={params.until} />
-                </label>
-              </div>
-              <Select name="source" label="Source" value={params.source} options={asOptions(options.sources)} />
-              <Select name="rung" label="Minimum rung" value={params.rung} options={asOptions(rung.enumValues)} />
-              <Select name="verdict" label="Verdict" value={params.verdict} options={asOptions(verdict.enumValues)} />
-              <Select name="action" label="My action" value={params.action} options={asOptions(actionKind.enumValues)} />
-              <Select
-                name="code"
-                label="Has code"
-                value={params.code}
-                options={[
-                  { value: "yes", label: "Yes" },
-                  { value: "no", label: "No" },
-                ]}
-              />
-              {params.client && <input type="hidden" name="client" value={params.client} />}
-              <input type="hidden" name="sort" value={params.sort} />
-              <div className="flex gap-2">
-                <Button type="submit" size="sm">
-                  Apply
-                </Button>
-                <Link href="/search" className={cn(buttonVariants({ size: "sm", variant: "ghost" }), "touch:h-11")}>
-                  Reset
-                </Link>
-              </div>
-            </form>
-
-            <div className="flex flex-col gap-3 border-t border-rule/40 pt-4">
-              <h2 className="micro">Presets</h2>
-              <form action="/search" className="flex flex-col gap-2 text-sm">
-                <span>What&apos;s new in</span>
-                <select name="domain" defaultValue={params.domain || domainOptions[0]?.value} className={SELECT_CLASS} required>
-                  {domainOptions.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-                <span>since</span>
-                <Input type="date" name="since" defaultValue={params.since || weekAgo} required />
-                <input type="hidden" name="sort" value="attention" />
-                <Button type="submit" size="sm" variant="outline">
-                  Show
-                </Button>
-              </form>
-              <form action="/search" className="flex flex-col gap-2 text-sm">
-                <span>Flagged for client</span>
-                {options.tags.length > 0 ? (
-                  <select name="client" defaultValue={params.client || options.tags[0]} className={SELECT_CLASS} required>
-                    {options.tags.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <Input name="client" placeholder="Client tag" required />
-                )}
-                <input type="hidden" name="sort" value="attention" />
-                <Button type="submit" size="sm" variant="outline">
-                  Show
-                </Button>
-              </form>
-            </div>
-          </div>
-        </details>
+    <div className="grid items-start gap-6 lg:grid-cols-[15rem_1fr]">
+      <aside aria-label="Search filters" className="glass-base p-4 max-lg:hidden">
+        <h2 className="micro mb-4">Filters</h2>
+        <FilterForms params={params} options={options} withQuery />
       </aside>
 
       <section className="flex min-w-0 flex-col gap-3">
+        <form action="/search" role="search" className="flex gap-2 lg:hidden">
+          <Input
+            name="q"
+            defaultValue={params.q}
+            placeholder="Search papers"
+            aria-label="Search query"
+            className="min-w-0 flex-1 touch:h-11"
+          />
+          {carried.map((key) => (
+            <input key={key} type="hidden" name={key} value={params[key]} />
+          ))}
+          {params.sort !== "relevance" && <input type="hidden" name="sort" value={params.sort} />}
+          <Button type="submit" className="touch:h-11">
+            Search
+          </Button>
+        </form>
         <div className="flex flex-wrap items-center gap-3">
           <span className="micro" aria-hidden>
             Sort
@@ -444,6 +530,11 @@ async function SearchView({ searchParams }: { searchParams: Promise<RawParams> }
               </Link>
             ))}
           </nav>
+          {activeFilters > 0 && (
+            <a href="#search-filters-panel" className="micro text-signal hover:text-foreground lg:hidden touch:inline-flex touch:min-h-11 touch:items-center">
+              <span className="num">{activeFilters}</span> filter{activeFilters === 1 ? "" : "s"} on ↓
+            </a>
+          )}
         </div>
         {params.client && (
           <p className="text-sm text-muted-foreground">
@@ -457,6 +548,28 @@ async function SearchView({ searchParams }: { searchParams: Promise<RawParams> }
           <Results params={params} />
         </Suspense>
       </section>
+
+      <aside id="search-filters-panel" aria-label="Search filters" className="glass-base scroll-mt-24 p-4 lg:hidden">
+        <details className="group/filters">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 [&::-webkit-details-marker]:hidden">
+            <span className="micro">
+              Filters
+              {activeFilters ? <span className="num text-foreground"> · {activeFilters} on</span> : null}
+            </span>
+            <svg
+              viewBox="0 0 16 16"
+              className="size-4 transition-transform group-open/filters:rotate-180"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </summary>
+          <div className="pt-4">
+            <FilterForms params={params} options={options} withQuery={false} />
+          </div>
+        </details>
+      </aside>
     </div>
   );
 }

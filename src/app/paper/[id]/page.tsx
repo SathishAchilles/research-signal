@@ -6,6 +6,7 @@ import { Suspense } from "react";
 import ReadAloud from "@/components/audio/ReadAloud";
 import { EvidenceMeter } from "@/components/brief/EvidenceMeter";
 import { SignalChip } from "@/components/brief/SignalChip";
+import { VerdictPill } from "@/components/brief/VerdictPill";
 import { PaperFigure } from "@/components/paper/PaperFigure";
 import { Badge } from "@/components/ui/badge";
 import { ConeChart } from "@/components/viz/ConeChart";
@@ -13,9 +14,9 @@ import { SpecTable } from "@/components/viz/SpecTable";
 import { db } from "@/db/client";
 import { buildPaperSpeech } from "@/lib/audio/speech";
 import { actions, domains, paperDomain, papers, signals } from "@/db/schema";
-import { COLORS_UI } from "@/lib/brief/cues";
+import { COLORS_UI, VERDICT_LABEL } from "@/lib/brief/cues";
 import type { Rung } from "@/lib/pipeline/rank";
-import { PaperActions } from "./PaperActions";
+import { CollapsibleAbstract, PaperActions } from "./PaperActions";
 
 // The existence check runs before anything streams, so an unknown id is a real 404.
 export const instant = false;
@@ -28,6 +29,7 @@ const LEAD_H = 420;
 const THUMB_W = 184;
 const THUMB_H = 120;
 const CONE_MAX = 12;
+const HISTORY_MAX = 8;
 
 // next/image serves only the hosts in next.config.ts images.remotePatterns; anything else is skipped.
 function servable(url: string): boolean {
@@ -50,6 +52,47 @@ const snapshot = (v: Date | string) => {
   return `${iso.slice(5, 10)} ${iso.slice(11, 13)}h`;
 };
 const score = (v: number | null) => (v === null ? "–" : v.toFixed(2));
+
+type SignalRow = typeof signals.$inferSelect;
+type SignalRun = { row: SignalRow; until: SignalRow; count: number };
+
+// The fields the history table shows; two snapshots with the same fingerprint read as one row.
+const fingerprint = (s: SignalRow) =>
+  JSON.stringify([
+    s.hfUpvotes,
+    s.hfComments,
+    s.githubRepo,
+    s.githubStars,
+    s.linkedModels,
+    s.linkedSpaces,
+    s.venue ?? s.orVenue,
+    s.orDecision,
+    s.s2Citations,
+  ]);
+
+// Collapse identical consecutive snapshots (oldest → newest) into runs, so the table shows only changes.
+function collapseRuns(oldestFirst: SignalRow[]): SignalRun[] {
+  const runs: SignalRun[] = [];
+  for (const s of oldestFirst) {
+    const last = runs[runs.length - 1];
+    if (last && fingerprint(last.row) === fingerprint(s)) {
+      last.until = s;
+      last.count += 1;
+    } else runs.push({ row: s, until: s, count: 1 });
+  }
+  return runs;
+}
+
+// Cone points: each snapshot where HF upvotes changed, plus the latest one so the chart reaches "now".
+function upvotePoints(oldestFirst: SignalRow[]): SignalRow[] {
+  const points: SignalRow[] = [];
+  for (const s of oldestFirst) {
+    if (!points.length || points[points.length - 1].hfUpvotes !== s.hfUpvotes) points.push(s);
+  }
+  const newest = oldestFirst[oldestFirst.length - 1];
+  if (newest && points[points.length - 1] !== newest) points.push(newest);
+  return points;
+}
 
 async function load(id: string) {
   const [paper] = await db.select().from(papers).where(eq(papers.id, id));
@@ -125,12 +168,14 @@ async function PaperView({ id }: { id: string }) {
     : [];
   const signalType = domainRows.find((d) => d.signalType !== null)?.signalType ?? null;
 
-  // signalRows is newest first; the chart reads oldest → newest over the latest snapshots.
+  // signalRows is newest first; the chart and the runs read oldest → newest.
   const latest = signalRows[0] ?? null;
   const venue = signalRows.find((s) => s.venue ?? s.orVenue);
-  const cones = signalRows
-    .slice(0, CONE_MAX)
-    .reverse()
+  const oldestFirst = [...signalRows].reverse();
+  const runs = collapseRuns(oldestFirst);
+  const shownRuns = runs.slice(-HISTORY_MAX).reverse();
+  const cones = upvotePoints(oldestFirst)
+    .slice(-CONE_MAX)
     .map((s) => ({
       label: snapshot(s.capturedAt),
       value: s.hfUpvotes ?? 0,
@@ -147,6 +192,7 @@ async function PaperView({ id }: { id: string }) {
 
   const words = paper.title.trim().split(/\s+/);
   const lastWord = words.pop() ?? "";
+  const lead = domainRows.find((d) => d.verdict !== null) ?? domainRows[0] ?? null;
 
   return (
     <article className="flex flex-col gap-8">
@@ -167,6 +213,37 @@ async function PaperView({ id }: { id: string }) {
           {words.length ? `${words.join(" ")} ` : null}
           <span className="text-signal-2">{lastWord}</span>
         </h1>
+        {lead?.verdict || lead?.clientAngle ? (
+          <div className="flex flex-col gap-2" data-paper-decision>
+            {lead.verdict ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <VerdictPill verdict={lead.verdict} />
+                <span className="micro">for {lead.name}</span>
+              </div>
+            ) : null}
+            {lead.clientAngle ? (
+              <p className="max-w-prose font-heading text-[17px] leading-7 text-foreground sm:text-lg">
+                <span className="sr-only">Client angle: </span>
+                {lead.clientAngle}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+        <PaperActions paperId={paper.id} current={lastAction} />
+        <ReadAloud
+          key={paper.id}
+          title={paper.title}
+          segments={buildPaperSpeech({
+            title: paper.title,
+            abstract: paper.abstract,
+            signalType,
+            rung: evidence?.rung ?? null,
+            verdict: lead?.verdict ?? null,
+            clientAngle: lead?.clientAngle ?? null,
+            domainName: lead?.name ?? null,
+          })}
+          className="-mt-1"
+        />
         <div className="flex flex-wrap items-center gap-2">
           {paper.urlAbs ? (
             <a className={chip} href={paper.urlAbs} target="_blank" rel="noreferrer">
@@ -183,64 +260,16 @@ async function PaperView({ id }: { id: string }) {
               PDF
             </a>
           ) : null}
-          <span aria-hidden className="mx-1 hidden h-5 w-px bg-rule/50 sm:inline-block" />
-          <PaperActions paperId={paper.id} current={lastAction} />
         </div>
-        <ReadAloud
-          key={paper.id}
-          title={paper.title}
-          segments={buildPaperSpeech({
-            title: paper.title,
-            abstract: paper.abstract,
-            signalType,
-            rung: evidence?.rung ?? null,
-            verdict: domainRows[0]?.verdict ?? null,
-            clientAngle: domainRows[0]?.clientAngle ?? null,
-            domainName: domainRows[0]?.name ?? null,
-          })}
-        />
       </header>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-        <div className="plate p-4">
-          <SpecTable
-            caption="Specimen"
-            rows={[
-              [
-                "Authors",
-                paper.authors.length ? (
-                  <span className="line-clamp-3" title={paper.authors.join(", ")}>
-                    {paper.authors.join(", ")}
-                  </span>
-                ) : (
-                  "–"
-                ),
-              ],
-              ["Rung", evidence?.rung ? <EvidenceMeter rung={evidence.rung} /> : "–"],
-              ["Signal", signalType ? <SignalChip signal={signalType} /> : "–"],
-              ["HF upvotes", dash(latest?.hfUpvotes)],
-              ["Stars", dash(latest?.githubStars)],
-              ["Models / Spaces", `${dash(latest?.linkedModels)} / ${dash(latest?.linkedSpaces)}`],
-              ["Citations", dash(latest?.s2Citations)],
-              ["Venue", dash(venue?.venue ?? venue?.orVenue)],
-              ["First seen", date(paper.createdAt)],
-            ]}
-          />
-        </div>
-        <div className="plate flex min-w-0 flex-col justify-between gap-6 p-4">
-          {signalRows.length ? (
-            <dl className="grid grid-cols-3 gap-4">
-              {history.map(([label, value]) => (
-                <div key={label} className="border-l-2 border-signal pl-3">
-                  <dt className="micro">{label}</dt>
-                  <dd className="mt-1 font-display text-2xl leading-none num">{value}</dd>
-                </div>
-              ))}
-            </dl>
-          ) : null}
-          <ConeChart title="HF upvotes by snapshot" unit="upvotes" data={cones} />
-        </div>
-      </div>
+      {paper.abstract ? (
+        <Section title="Abstract">
+          <div className="plate p-4 sm:p-5">
+            <CollapsibleAbstract text={paper.abstract} />
+          </div>
+        </Section>
+      ) : null}
 
       <Section title={gallery.length ? `Figures · ${gallery.length}` : "Figures"}>
         <div className="plate flex flex-col gap-4 p-4">
@@ -299,13 +328,46 @@ async function PaperView({ id }: { id: string }) {
         </div>
       </Section>
 
-      {paper.abstract ? (
-        <Section title="Abstract">
-          <div className="plate p-4 sm:p-5">
-            <p className="max-w-prose text-[15px] leading-7">{paper.abstract}</p>
-          </div>
-        </Section>
-      ) : null}
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+        <div className="plate p-4">
+          <SpecTable
+            caption="Specimen"
+            rows={[
+              [
+                "Authors",
+                paper.authors.length ? (
+                  <span className="line-clamp-3" title={paper.authors.join(", ")}>
+                    {paper.authors.join(", ")}
+                  </span>
+                ) : (
+                  "–"
+                ),
+              ],
+              ["Rung", evidence?.rung ? <EvidenceMeter rung={evidence.rung} /> : "–"],
+              ["Signal", signalType ? <SignalChip signal={signalType} /> : "–"],
+              ["HF upvotes", dash(latest?.hfUpvotes)],
+              ["Stars", dash(latest?.githubStars)],
+              ["Models / Spaces", `${dash(latest?.linkedModels)} / ${dash(latest?.linkedSpaces)}`],
+              ["Citations", dash(latest?.s2Citations)],
+              ["Venue", dash(venue?.venue ?? venue?.orVenue)],
+              ["First seen", date(paper.createdAt)],
+            ]}
+          />
+        </div>
+        <div className="plate flex min-w-0 flex-col justify-between gap-6 p-4">
+          {signalRows.length ? (
+            <dl className="grid grid-cols-3 gap-4">
+              {history.map(([label, value]) => (
+                <div key={label} className="border-l-2 border-signal pl-3">
+                  <dt className="micro">{label}</dt>
+                  <dd className="mt-1 font-display text-2xl leading-none num">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
+          <ConeChart title="HF upvotes by snapshot" unit="upvotes" data={cones} />
+        </div>
+      </div>
 
       {domainRows.length ? (
         <Section title="Per-domain verdicts">
@@ -320,7 +382,7 @@ async function PaperView({ id }: { id: string }) {
                   <span className="font-heading font-medium">{d.name}</span>
                   {d.verdict ? (
                     <span className="micro font-semibold" style={{ color: COLORS_UI.verdict[d.verdict] }}>
-                      {d.verdict}
+                      {VERDICT_LABEL[d.verdict]}
                     </span>
                   ) : null}
                   {d.signalType ? <SignalChip signal={d.signalType} /> : null}
@@ -358,9 +420,17 @@ async function PaperView({ id }: { id: string }) {
                 </tr>
               </thead>
               <tbody>
-                {signalRows.map((s) => (
-                  <tr key={s.id} className="border-t border-border first:border-t-0 hover:bg-plate-hover">
-                    <td className="sticky left-0 z-10 bg-plate-solid py-1.5 pr-3 pl-4 whitespace-nowrap">{date(s.capturedAt)}</td>
+                {shownRuns.map(({ row: s, until, count }) => (
+                  <tr key={s.id} className="border-t border-border first:border-t-0 hover:bg-plate-hover" data-snapshots={count}>
+                    <td className="sticky left-0 z-10 bg-plate-solid py-1.5 pr-3 pl-4 whitespace-nowrap">
+                      {date(s.capturedAt)} <span className="text-muted-foreground">{snapshot(s.capturedAt).slice(6)}</span>
+                      {count > 1 ? (
+                        <span className="ml-1.5 text-xs text-muted-foreground" title={`Unchanged through ${snapshot(until.capturedAt)}`}>
+                          ×{count}
+                          <span className="sr-only"> identical snapshots, unchanged through {snapshot(until.capturedAt)}</span>
+                        </span>
+                      ) : null}
+                    </td>
                     <td className="px-3 py-1.5">{s.hfUpvotes ?? "–"}</td>
                     <td className="px-3 py-1.5">{s.hfComments ?? "–"}</td>
                     <td className="px-3 py-1.5">
@@ -382,6 +452,11 @@ async function PaperView({ id }: { id: string }) {
                 ))}
               </tbody>
             </table>
+            <p className="micro border-t border-border px-4 py-2">
+              {runs.length} {runs.length === 1 ? "change" : "changes"} across {signalRows.length}{" "}
+              {signalRows.length === 1 ? "snapshot" : "snapshots"}
+              {runs.length > HISTORY_MAX ? ` · latest ${HISTORY_MAX} shown` : ""}
+            </p>
           </div>
         ) : (
           <p className="plate p-4 text-sm text-muted-foreground">No signals captured yet.</p>

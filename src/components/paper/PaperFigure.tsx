@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { FIRST_PAGE_LABEL } from "@/lib/brief/figures";
 import type { SignalType } from "@/lib/pipeline/rank";
 import { cn } from "@/lib/utils";
 import { SignalGlyph, signalGlyphLabel } from "./SignalGlyph";
@@ -25,6 +26,8 @@ export type PaperFigureProps = {
   showCaption?: boolean;
   /** Wrap the frame in a link to /paper/<id>. Turn off inside rows that are already links. Default true. */
   linked?: boolean;
+  /** papers.figure_source. "hf_thumb" is the rendered title page: it is labelled "First page", not a figure. */
+  figureSource?: string | null;
 };
 
 // The hosts next.config.ts images.remotePatterns allows. next/image throws at render for any other
@@ -81,10 +84,12 @@ export function PaperFigure({
   sizes,
   showCaption = true,
   linked = true,
+  figureSource,
 }: PaperFigureProps) {
   const attribution = figureAttribution(authors, arxivId);
   const src = isServableFigure(figureUrl) ? figureUrl : null;
-  const text = caption?.trim();
+  const firstPage = figureSource === "hf_thumb";
+  const text = firstPage ? FIRST_PAGE_LABEL : caption?.trim();
   const framed = height >= 120; // thumbnails skip the padding and corner marks
   const frameClass = cn(
     "relative flex items-center justify-center overflow-hidden border border-plate-rim bg-plate-solid text-signal/75",
@@ -98,7 +103,7 @@ export function PaperFigure({
         <span className={cn("relative block size-full overflow-hidden bg-[#F3F7F7]", framed ? "rounded-[6px]" : "rounded-[5px]")}>
           <Image
             src={src}
-            alt={title ? `Figure from ${title}` : text || attribution}
+            alt={firstPage ? `${FIRST_PAGE_LABEL} of ${title ?? "the paper"}` : title ? `Figure from ${title}` : text || attribution}
             fill
             sizes={sizes ?? `${width}px`}
             preload={priority}
@@ -120,7 +125,7 @@ export function PaperFigure({
   );
 
   return (
-    <figure data-figure={src ? "image" : "glyph"} className={cn("text-foreground", className)} style={{ width, maxWidth: "100%" }}>
+    <figure data-figure={src ? (firstPage ? "first-page" : "image") : "glyph"} className={cn("text-foreground", className)} style={{ width, maxWidth: "100%" }}>
       {linked ? (
         <Link href={`/paper/${paperId}`} className={frameClass} style={{ width: "100%", height }}>
           {inner}
@@ -135,7 +140,9 @@ export function PaperFigure({
           {src ? (
             <>
               {text ? <span className="line-clamp-2 text-foreground/90">{text}</span> : null}
-              <span className="mt-0.5 block font-mono text-[10.5px] tracking-[.02em] text-muted-foreground">{attribution}</span>
+              <span className="mt-0.5 block font-mono text-[10.5px] tracking-[.02em] text-muted-foreground">
+                {firstPage ? attribution.replace(/^Figure: /, "") : attribution}
+              </span>
             </>
           ) : (
             <span className="block font-mono text-[10.5px] tracking-[.02em] text-muted-foreground">

@@ -1,5 +1,5 @@
 import type { ActionKind, BriefCard } from "@/lib/brief/types";
-import { AttentionLine, CardFrame, type CardProse, CueRow, MoreDetails } from "./CardParts";
+import { AttentionLine, CardFrame, type CardProse, CueRow, MoreDetails, TitleLink } from "./CardParts";
 
 // Below lg and on touch: 44px source links, 14px detail text, and an anchor offset that clears the
 // sticky nav plus the taller chips bar.
@@ -9,7 +9,9 @@ export function StandardCard({ card, prose, action }: { card: BriefCard; prose?:
   return (
     <CardFrame card={card} action={action} className={CARD_TOUCH}>
       <CueRow card={card} />
-      <h3 className="mt-1.5 font-heading leading-snug font-semibold">{prose?.headline || card.title}</h3>
+      <h3 className="mt-1.5 font-heading leading-snug font-semibold">
+        <TitleLink paperId={card.paperId}>{prose?.headline || card.title}</TitleLink>
+      </h3>
       {prose?.headline ? <p className="text-sm text-muted-foreground lg:text-xs">{card.title}</p> : null}
       {prose?.pointer || prose?.line ? <p className="mt-1 text-sm">{prose.pointer || prose.line}</p> : null}
       <p className="mt-1 text-sm">

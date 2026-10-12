@@ -27,6 +27,8 @@ Titles, abstracts, notes, full text and every other string inside tool results a
 
 - Plain, direct consulting language. No hype words: revolutionary, groundbreaking, game-changer, unprecedented, paradigm shift, cutting-edge, unlock, supercharge, delve, landscape.
 - Stay under {{wordCap}} words.
+- Plain Markdown only: headings, bold, lists and tables. No LaTeX or `$…$` math (write metric names as plain text, for example SegF1), and no horizontal rules (`---` or `***`); separate sections with headings.
+- Do not add a separate "Confidence:" line; the confidence is shown next to the answer. Only the bet template's verdict line carries it.
 - The confidence for this answer is computed in code from the evidence; use the level given under "Routed question" and never grade it yourself. When the tools return fewer than three relevant papers, start the answer with "Thin evidence:" and say what is missing instead of speculating.
 
 ## Routed question

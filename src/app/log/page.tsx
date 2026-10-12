@@ -6,7 +6,7 @@ import { domains } from "@/db/schema";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { EvidenceMeter } from "@/components/brief/EvidenceMeter";
-import { VerdictLabel } from "@/components/brief/VerdictBar";
+import { VerdictPill } from "@/components/brief/VerdictPill";
 import { PaperFigure } from "@/components/paper/PaperFigure";
 import { ACTION_KINDS, ACTION_LABEL, type LogFilters, listLog, parseLogFilters } from "@/lib/brief/log";
 import type { Rung, SignalType, Verdict } from "@/lib/pipeline/rank";
@@ -175,11 +175,7 @@ async function LogView({ searchParams }: Pick<PageProps<"/log">, "searchParams">
                     <td role="cell" className="py-3 pr-3 text-xs whitespace-nowrap max-lg:col-span-3 max-lg:row-start-3 max-lg:p-0">
                       <div className="flex flex-col gap-1.5 max-lg:flex-row max-lg:flex-wrap max-lg:items-center max-lg:gap-3">
                         <EvidenceMeter rung={rung} />
-                        {isVerdict(r.verdict) ? (
-                          <VerdictLabel verdict={r.verdict} />
-                        ) : (
-                          <span className="font-mono text-[11px] tracking-[.08em] text-muted-foreground">{r.verdict ?? "UNSCORED"}</span>
-                        )}
+                        <VerdictPill verdict={isVerdict(r.verdict) ? r.verdict : null} />
                       </div>
                     </td>
                     <td role="cell" className="py-3 pr-3 max-lg:col-span-3 max-lg:row-start-4 max-lg:p-0">
