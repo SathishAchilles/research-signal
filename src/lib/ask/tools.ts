@@ -2,12 +2,13 @@ import { tool } from "ai";
 import { asc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db/client";
-import { domains, paperDomain, papers } from "@/db/schema";
+import { domains, paperDomain, papers, sources } from "@/db/schema";
 import { embedTexts } from "@/lib/llm/embed";
 import { enqueue } from "@/lib/pipeline/jobs";
 import type { Rung } from "@/lib/pipeline/rank";
 import { searchFiltersSchema } from "@/lib/search/query";
 import { getFullText } from "@/lib/sources/fulltext";
+import { getSourceSecret } from "@/lib/sources/registry";
 import { writeHfSignals } from "@/lib/sources/hf";
 import { normalizeTitle } from "@/lib/sources/openreview";
 import { httpGet } from "@/lib/sources/types";
@@ -25,12 +26,17 @@ export const ASK_TOOL_NAMES = [
 export type AskToolName = (typeof ASK_TOOL_NAMES)[number];
 
 export const SEARCH_TOP = 20;
-export const RELEVANT_COSINE = 0.35;
+// gemini-embedding cosines sit high for any text: off-topic queries ("medieval cheese fermentation",
+// "sourdough baking") top out at 0.46-0.50, on-topic AI queries put their 5th-best hit at 0.57-0.62.
+export const RELEVANT_COSINE = 0.55;
 export const LIVE_MIN_HITS = 5;
 export const MAX_FULLTEXT = 2;
 export const RELATED_K = 8;
 const LIVE_LIMIT = 10;
 const ABSTRACT_CHARS = 700;
+// Cards for the top hits of the first search go into the first message, so the model can write
+// without a get_papers round.
+export const PRELOAD_PAPERS = SEARCH_TOP;
 const HF_SEARCH = "https://huggingface.co/api/papers/search";
 
 export const EVIDENCE_FIELDS = ["upvotes", "comments", "stars", "models", "spaces", "citations"] as const;
@@ -44,23 +50,30 @@ export type PaperRef = {
   rung: Rung | null;
   relevant: boolean;
   evidence: Evidence;
+  // Serialised tool output about this paper: numbers attributed to a cited paper must appear here.
+  data: string[];
 };
 
 export type AskContext = {
   routed: RoutedIntent;
+  // Tags this request's llm_calls rows (stage suffix "#<uuid>", split by scripts/sql/009).
+  requestId: string | null;
   firstIndexedAt: Date | null;
   refs: Map<string, PaperRef>;
   byPaper: Map<string, PaperRef>;
   strongHits: number | null;
   fulltextCalls: number;
   live: { used: boolean; found: number; inserted: number };
-  // Serialised tool outputs: numbers in the answer must appear here or in the prompt.
+  // Serialised tool outputs, given to the repair call.
   retrieved: string[];
+  // Tool output not tied to one paper (trend weeks and totals); numbers may come from here too.
+  aggregates: string[];
 };
 
-export function createAskContext(routed: RoutedIntent, firstIndexedAt: Date | null): AskContext {
+export function createAskContext(routed: RoutedIntent, firstIndexedAt: Date | null, requestId: string | null = null): AskContext {
   return {
     routed,
+    requestId,
     firstIndexedAt,
     refs: new Map(),
     byPaper: new Map(),
@@ -68,7 +81,12 @@ export function createAskContext(routed: RoutedIntent, firstIndexedAt: Date | nu
     fulltextCalls: 0,
     live: { used: false, found: 0, inserted: 0 },
     retrieved: [],
+    aggregates: [],
   };
+}
+
+export function stageFor(ctx: Pick<AskContext, "requestId">, stage: string): string {
+  return ctx.requestId ? `${stage}#${ctx.requestId}` : stage;
 }
 
 type RefInput = { paperId: string; title: string; rung?: Rung | null; relevant?: boolean; evidence?: Evidence };
@@ -88,10 +106,17 @@ function register(ctx: AskContext, input: RefInput): PaperRef {
     rung: input.rung ?? null,
     relevant: input.relevant ?? false,
     evidence: input.evidence ?? {},
+    data: [],
   };
   ctx.refs.set(entry.ref, entry);
   ctx.byPaper.set(entry.paperId, entry);
   return entry;
+}
+
+// Keeps what a tool said about one paper and returns it unchanged.
+function about<T>(entry: PaperRef, output: T): T {
+  entry.data.push(JSON.stringify(output));
+  return output;
 }
 
 function record<T>(ctx: AskContext, output: T): T {
@@ -135,7 +160,7 @@ function evidenceOf(row: EvidenceRow): Evidence {
 }
 
 async function searchIndex(ctx: AskContext, q: string, filters: z.infer<typeof searchFiltersSchema>) {
-  const [vector] = await embedTexts([q], "search_query");
+  const [vector] = await embedTexts([q], stageFor(ctx, "search_query"));
   const vec = `[${vector.join(",")}]`;
   const rows = await db.execute<{
     paper_id: string;
@@ -146,7 +171,8 @@ async function searchIndex(ctx: AskContext, q: string, filters: z.infer<typeof s
     rung: Rung | null;
   }>(sql`
     select h.paper_id, h.title, h.published_at, h.attention,
-      -(d.embedding <#> ${vec}::extensions.halfvec(768)) as cosine, e.rung
+      -- hybrid_search returns this similarity itself once scripts/sql/007 is applied; the join covers older versions.
+      coalesce((to_jsonb(h) ->> 'similarity')::float8, -(d.embedding <#> ${vec}::extensions.halfvec(768))) as cosine, e.rung
     from research_signal.hybrid_search(${q}::text, ${vec}::extensions.halfvec(768), ${JSON.stringify(filters)}::jsonb, ${SEARCH_TOP}::int) h
     join research_signal.search_docs d on d.id = h.id
     left join research_signal.evidence e on e.paper_id = h.paper_id
@@ -166,7 +192,14 @@ async function searchIndex(ctx: AskContext, q: string, filters: z.infer<typeof s
       rung: row.rung,
       relevant: cosine !== null && cosine >= RELEVANT_COSINE,
     });
-    return { ref: entry.ref, title: row.title, published: day(row.published_at), cosine, rung: row.rung, attention: round2(row.attention) };
+    return about(entry, {
+      ref: entry.ref,
+      title: row.title,
+      published: day(row.published_at),
+      cosine,
+      rung: row.rung,
+      attention: round2(row.attention),
+    });
   });
   const strong = hits.filter((h) => h.cosine !== null && h.cosine >= RELEVANT_COSINE).length;
   ctx.strongHits = Math.max(ctx.strongHits ?? 0, strong);
@@ -177,7 +210,8 @@ async function searchIndex(ctx: AskContext, q: string, filters: z.infer<typeof s
   };
 }
 
-async function getPapers(ctx: AskContext, ids: string[]) {
+// markRelevant: papers the model asked for count as relevant; preloaded cards keep their search flag.
+async function getPapers(ctx: AskContext, ids: string[], markRelevant = true) {
   const resolved = [...new Set(ids.map((id) => resolve(ctx, id)).filter((id): id is string => id !== null))];
   if (resolved.length === 0) return { papers: [], error: "No known paper refs or ids given" };
   const rows = await db.execute<
@@ -214,8 +248,8 @@ async function getPapers(ctx: AskContext, ids: string[]) {
 
   return {
     papers: rows.map((row) => {
-      const entry = register(ctx, { paperId: row.id, title: row.title, rung: row.rung, relevant: true, evidence: evidenceOf(row) });
-      return {
+      const entry = register(ctx, { paperId: row.id, title: row.title, rung: row.rung, relevant: markRelevant, evidence: evidenceOf(row) });
+      return about(entry, {
         ref: entry.ref,
         title: row.title,
         authors: row.authors.slice(0, 4),
@@ -230,7 +264,7 @@ async function getPapers(ctx: AskContext, ids: string[]) {
         reviewDecision: row.or_decision,
         domains: row.domains ?? [],
         abstract: row.abstract.slice(0, ABSTRACT_CHARS),
-      };
+      });
     }),
   };
 }
@@ -280,7 +314,7 @@ async function trend(ctx: AskContext, input: { q?: string | null; domainId?: num
     attention: Number(row.attention),
     top: (row.top ?? []).map((t) => {
       const entry = register(ctx, { paperId: t.id, title: t.title, rung: t.rung, relevant: q !== null || domainId !== null });
-      return { ref: entry.ref, title: t.title, upvotes: t.upvotes, rising: t.rising };
+      return about(entry, { ref: entry.ref, title: t.title, upvotes: t.upvotes, rising: t.rising });
     }),
   }));
   const counts = weeks.map((w) => w.papers);
@@ -288,7 +322,9 @@ async function trend(ctx: AskContext, input: { q?: string | null; domainId?: num
   const earlier = counts.slice(-4, -2).reduce((a, b) => a + b, 0);
   const momentum =
     counts.length < 3 ? "unknown" : recent > earlier * 1.2 ? "rising" : recent < earlier * 0.8 ? "fading" : "steady";
-  return { since, bucket: "week", total: counts.reduce((a, b) => a + b, 0), momentum, weeks };
+  const output = { since, bucket: "week", total: counts.reduce((a, b) => a + b, 0), momentum, weeks };
+  ctx.aggregates.push(JSON.stringify({ ...output, weeks: weeks.map((w) => ({ week: w.week, papers: w.papers, rungs: w.rungs, attention: w.attention })) }));
+  return output;
 }
 
 async function related(ctx: AskContext, paperId: string) {
@@ -308,14 +344,17 @@ async function related(ctx: AskContext, paperId: string) {
     order by n.cosine desc`);
   const [latest] = await db.execute<{ builds_on: { title: string; citationCount: number | null }[] | null }>(sql`
     select builds_on from research_signal.latest_signals where paper_id = ${id}::uuid`);
-  return {
+  const output = {
     neighbours: neighbours.map((row) => {
       const cosine = round2(row.cosine);
       const entry = register(ctx, { paperId: row.id, title: row.title, rung: row.rung, relevant: (cosine ?? 0) >= RELEVANT_COSINE });
-      return { ref: entry.ref, title: row.title, cosine, rung: row.rung };
+      return about(entry, { ref: entry.ref, title: row.title, cosine, rung: row.rung });
     }),
     buildsOn: latest?.builds_on ? latest.builds_on.map((b) => ({ title: b.title, citations: b.citationCount })) : null,
   };
+  const source = ctx.byPaper.get(id);
+  if (source && output.buildsOn) about(source, { buildsOn: output.buildsOn });
+  return output;
 }
 
 async function myLog(
@@ -346,16 +385,23 @@ async function myLog(
   return {
     entries: rows.map((row) => {
       const entry = register(ctx, { paperId: row.paper_id, title: row.title, rung: row.rung, relevant: true });
-      return {
+      return about(entry, {
         ref: entry.ref,
         title: row.title,
         action: row.action,
         note: row.note,
         clientTag: row.client_tag,
         at: day(row.created_at),
-      };
+      });
     }),
   };
+}
+
+// The CORE fallback is used only while the core source is enabled and has a key.
+async function coreApiKey(): Promise<string | undefined> {
+  const [core] = await db.select({ enabled: sources.enabled }).from(sources).where(eq(sources.kind, "core"));
+  if (!core?.enabled) return undefined;
+  return getSourceSecret("core").catch(() => undefined);
 }
 
 async function fulltext(ctx: AskContext, paperId: string) {
@@ -369,8 +415,9 @@ async function fulltext(ctx: AskContext, paperId: string) {
     .where(eq(papers.id, id));
   if (!paper) return { error: "Unknown paper" };
   const entry = register(ctx, { paperId: paper.id, title: paper.title, relevant: true });
-  const result = await getFullText(paper);
+  const result = await getFullText(paper, { coreApiKey: await coreApiKey() });
   if (!result) return { ref: entry.ref, error: "No full text available" };
+  about(entry, result.text);
   return { ref: entry.ref, source: result.source, text: `<untrusted_paper_text>\n${result.text}\n</untrusted_paper_text>` };
 }
 
@@ -474,24 +521,30 @@ async function liveSearch(ctx: AskContext, q: string) {
       const row = byArxiv.get(arxivId);
       if (!row) return [];
       const entry = register(ctx, { paperId: row.id, title: row.title, rung: row.rung, relevant: true, evidence: evidenceOf(row) });
-      return [{
-        ref: entry.ref,
-        title: row.title,
-        published: day(row.published),
-        rung: row.rung,
-        evidence: entry.evidence,
-        abstract: row.abstract.slice(0, ABSTRACT_CHARS),
-      }];
+      return [
+        about(entry, {
+          ref: entry.ref,
+          title: row.title,
+          published: day(row.published),
+          rung: row.rung,
+          evidence: entry.evidence,
+          abstract: row.abstract.slice(0, ABSTRACT_CHARS),
+        }),
+      ];
     }),
   };
 }
 
 const refOrId = z.string().min(1).describe("A paper ref such as p3, or a paper uuid");
 
-// The playbook's first search, run in code before the model starts so it saves one model round.
+// The playbook's first search plus the cards of its top hits, run in code before the model starts
+// so the model can write without spending tool rounds on them.
 export async function initialSearch(ctx: AskContext, q: string) {
   const filters = ctx.routed.since ? { since: ctx.routed.since } : {};
-  return { input: { q, filters }, output: record(ctx, await searchIndex(ctx, q, filters)) };
+  const output = record(ctx, await searchIndex(ctx, q, filters));
+  const top = output.hits.slice(0, PRELOAD_PAPERS).map((h) => h.ref);
+  const cards = top.length ? record(ctx, await getPapers(ctx, top, false)).papers : [];
+  return { input: { q, filters }, output, papers: cards };
 }
 
 export function askTools(ctx: AskContext) {

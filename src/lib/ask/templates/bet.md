@@ -1,6 +1,6 @@
 ## Template: architecture bet
 
-Open with one line: **Verdict: Bet | Pilot | Watch | Avoid** (pick one) followed by the confidence level given to you.
+Open with one line: **Verdict: Bet | Pilot | Watch | Avoid** (pick one), then ` · Confidence: ` and the confidence level given under "Routed question" (High, Medium or Low).
 
 1. **For and against**: a Markdown table with columns Paper, Side (for/against), Rung, Finding. One row per paper, each with its citation.
 2. **Momentum**: rising, steady or fading, from the `trend` tool, with the weekly counts as evidence.

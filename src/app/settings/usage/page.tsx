@@ -50,10 +50,11 @@ async function Usage() {
     db.execute<CostRow>(sql`
       select stage,
         coalesce(sum(cost_usd) filter (where created_at >= date_trunc('week', now())), 0)::float8 as week,
-        coalesce(sum(cost_usd), 0)::float8 as month,
-        count(*)::int as calls
+        coalesce(sum(cost_usd) filter (where created_at >= date_trunc('month', now())), 0)::float8 as month,
+        (count(*) filter (where created_at >= date_trunc('month', now())))::int as calls
       from research_signal.llm_calls
-      where created_at >= date_trunc('month', now())
+      -- A week can start in the previous month, so read from whichever boundary is earlier.
+      where created_at >= least(date_trunc('week', now()), date_trunc('month', now()))
       group by stage
       order by month desc`),
     db.execute<RunRow>(sql`

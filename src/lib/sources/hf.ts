@@ -18,6 +18,8 @@ export type HfDaily = {
   numComments: number | null;
   githubRepo: string | null;
   githubStars: number | null;
+  mediaImage?: string | null;
+  thumbnail?: string | null;
 };
 
 export type HfDetail = {
@@ -28,6 +30,7 @@ export type HfDetail = {
   githubStars: number | null;
   linkedModels: number | null;
   linkedSpaces: number | null;
+  mediaImage?: string | null;
 };
 
 type HfPaper = {
@@ -40,10 +43,24 @@ type HfPaper = {
   numTotalSpaces?: number;
   linkedModels?: unknown[];
   linkedSpaces?: unknown[];
+  mediaUrls?: unknown[];
 };
+
+type HfDailyItem = { paper?: HfPaper; numComments?: number; mediaUrls?: unknown[]; thumbnail?: string };
 
 const int = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.round(v) : null);
 const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+
+const IMAGE_URL = /^https:\/\/[^?#]+\.(?:png|jpe?g|gif|webp|avif)(?:[?#].*)?$/i;
+
+// The first uploaded image; videos (.mp4 and the like) stay links only and are never a lead figure.
+function firstImage(...lists: (unknown[] | undefined)[]): string | null {
+  for (const list of lists) {
+    const url = list?.find((u): u is string => typeof u === "string" && IMAGE_URL.test(u.trim()));
+    if (url) return url.trim();
+  }
+  return null;
+}
 
 function authHeaders(token?: string): Record<string, string> {
   return token ? { authorization: `Bearer ${token}` } : {};
@@ -74,7 +91,7 @@ export async function fetchDaily(dates: string[], token?: string): Promise<HfDai
   const out: HfDaily[] = [];
   for (const date of dates) {
     const items =
-      (await getJson<{ paper?: HfPaper; numComments?: number }[]>(
+      (await getJson<HfDailyItem[]>(
         `${API}/daily_papers?date=${encodeURIComponent(date)}&limit=${DAILY_LIMIT}`,
         token,
       )) ?? [];
@@ -89,6 +106,8 @@ export async function fetchDaily(dates: string[], token?: string): Promise<HfDai
         numComments: int(item.numComments),
         githubRepo: str(paper.githubRepo),
         githubStars: int(paper.githubStars),
+        mediaImage: firstImage(paper.mediaUrls, item.mediaUrls),
+        thumbnail: str(item.thumbnail),
       });
     }
   }
@@ -104,6 +123,7 @@ function toDetail(arxivId: string, paper: HfPaper): HfDetail {
     githubStars: int(paper.githubStars),
     linkedModels: int(paper.numTotalModels) ?? paper.linkedModels?.length ?? null,
     linkedSpaces: int(paper.numTotalSpaces) ?? paper.linkedSpaces?.length ?? null,
+    mediaImage: firstImage(paper.mediaUrls),
   };
 }
 
@@ -215,8 +235,54 @@ export async function insertSignals(rows: SignalInput[]): Promise<number> {
   return inserted.length;
 }
 
-// Writes one snapshot per paper that already exists; unknown arXiv ids are skipped.
+export const FIGURE_SOURCES = ["hf_media", "arxiv_html", "hf_thumb"] as const;
+export type FigureSource = (typeof FIGURE_SOURCES)[number];
+export type LeadFigure = { arxivId: string; url: string; source: FigureSource };
+
+// Sets papers.figure_url in the D23 order (hf_media, then arxiv_html, then hf_thumb): a candidate
+// replaces the stored figure only when its source ranks the same or higher. Unknown arXiv ids are skipped.
+export async function saveLeadFigures(figures: LeadFigure[]): Promise<number> {
+  if (figures.length === 0) return 0;
+  const records = figures.map((f) => ({ arxiv_id: f.arxivId, url: f.url, source: f.source }));
+  const rank = (col: unknown) =>
+    sql`array_position(array['hf_media', 'arxiv_html', 'hf_thumb']::text[], ${col})`;
+  const updated = await db.execute(sql`
+    update research_signal.papers p
+    set figure_url = r.url, figure_source = r.source
+    from jsonb_to_recordset(${JSON.stringify(records)}::jsonb) as r(arxiv_id text, url text, source text)
+    where p.arxiv_id = r.arxiv_id
+      and (p.figure_source is null or ${rank(sql`r.source`)} <= ${rank(sql`p.figure_source`)})
+      and (p.figure_url is distinct from r.url or p.figure_source is distinct from r.source)
+    returning p.id`);
+  return updated.length;
+}
+
+// The best HF candidate per paper: an uploaded image beats the social thumbnail. No extra requests.
+function hfLeadFigures(rows: (HfDaily | HfDetail)[]): LeadFigure[] {
+  const best = new Map<string, LeadFigure>();
+  for (const row of rows) {
+    const thumbnail = "thumbnail" in row ? row.thumbnail : null;
+    const candidate: LeadFigure | null = row.mediaImage
+      ? { arxivId: row.arxivId, url: row.mediaImage, source: "hf_media" }
+      : thumbnail
+        ? { arxivId: row.arxivId, url: thumbnail, source: "hf_thumb" }
+        : null;
+    const prev = best.get(row.arxivId);
+    if (candidate && (!prev || FIGURE_SOURCES.indexOf(candidate.source) < FIGURE_SOURCES.indexOf(prev.source))) {
+      best.set(row.arxivId, candidate);
+    }
+  }
+  return [...best.values()];
+}
+
+// Writes one snapshot per paper that already exists, and records its HF lead figure; unknown arXiv
+// ids are skipped. A failed figure write is logged and never fails the signals write.
 export async function writeHfSignals(rows: (HfDaily | HfDetail)[]): Promise<number> {
+  try {
+    await saveLeadFigures(hfLeadFigures(rows));
+  } catch (error) {
+    console.warn(`hf figures: ${errorMessage(error)}`);
+  }
   const byId = new Map<string, SignalInput>();
   for (const row of rows) {
     const prev = byId.get(row.arxivId);

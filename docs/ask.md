@@ -6,14 +6,15 @@ The Ask panel (`/ask`) answers a keyword, term or question with a cited, evidenc
 
 1. **Route** (`route-intent.ts`): one `generateObject` call (stage `ask_route`, minimal reasoning) returns `{intent, bareTerm, entities, since?, domains, client?}`.
 2. **Playbook** (`playbooks.ts`): code picks the tool set and the output template (`templates/*.md`) for the intent. A bare term uses EXPLAIN + CATCHUP together.
-3. **First search in code**: the playbook's first `search_index` call runs before the model starts, using the routed entities and `since`. This saves one model round so text starts streaming within 10 s.
-4. **Tools loop**: `streamText` with `chatModel(app_settings.chat_model)`, the playbook tools, `stopWhen: stepCountIs(6)` and the system prompt `prompts/system.md`. Step 6 runs with `toolChoice: "none"`, so the answer is always written.
-5. **Validate** (`answer.ts`, `validateAnswer`): checks for banned words, the word cap (`app_settings.prose_word_cap`), that every `[pN]` was returned by a tool, that evidence tokens resolve, and that every number appears in the retrieved data or the prompt. On failure there is one repair call (stage `ask_repair`). If the repair still fails, the answer is saved with a warning in `coverage.warning`.
-6. **Grade** (`grade.ts`, `confidence`): computed from the cited papers, or from all relevant retrieved papers when nothing is cited.
+3. **First search in code**: the playbook's first `search_index` call, plus the `get_papers` cards of its top 20 hits, runs before the model starts, using the routed entities and `since`. Routing and this search are the only work before the response starts, so any failure there (including a 402 from OpenRouter) is a plain JSON response.
+4. **Preface**: the stream opens with a one-line italic preface ("Searched 1.5k indexed papers…: N close matches"), so text appears before the model starts. It is not part of the saved answer.
+5. **Tools loop**: `streamText` with `chatModel(app_settings.chat_model, {reasoning: {max_tokens: 512}})`, `maxOutputTokens` = 512 + 2 × word cap, the playbook tools, `stopWhen: stepCountIs(6)` and the system prompt `prompts/system.md`. From step 3 on the model runs with `toolChoice: "none"` (at most 2 tool rounds before it writes). The system prompt is rebuilt each step with the confidence computed in code from the relevant papers found so far.
+6. **Validate** (`answer.ts`, `validateAnswer`): checks for banned words, the word cap (`app_settings.prose_word_cap`), that every `[pN]` was returned by a tool, that evidence tokens resolve, and that every number is an evidence-token value, appears in a tool's output about a paper the answer cites (spelled-out numbers such as "fifteen" count), or appears in the question context (the prompt, today, `since`, the template and `trend` week counts). List markers are ignored. On failure there is one repair call (stage `ask_repair`). If the repair still fails, the answer is saved with a warning in `coverage.warning`.
+7. **Grade** (`grade.ts`, `confidence`): computed from the cited papers, or from all relevant retrieved papers when nothing is cited. For BET, the verdict line is rewritten to `**Verdict: X** · Confidence: <grade>` so it always matches the badge.
    - **High:** at least 5 papers at rung CODE or above, including at least 1 PEER.
    - **Medium:** at least 3 papers.
    - **Low:** anything else. The panel then shows the "thin evidence" notice.
-7. **Save**: `ask_threads` and `ask_messages` store the content with tokens filled, plus `citations` (ref → paper id), `confidence`, `coverage` and `cost_usd`. The answer is also upserted into `search_docs` as `entity_type = 'answer'`, so threads are searchable.
+8. **Save**: in one transaction, `ask_threads` (for a new thread) and `ask_messages` (question and answer) store the content with tokens filled, plus `citations` (ref → paper id), `confidence`, `coverage` and `cost_usd`. The answer is also upserted into `search_docs` as `entity_type = 'answer'`, so threads are searchable. Nothing is written for an answer that fails, so a failed request leaves no thread behind.
 
 ## Intents
 
@@ -32,13 +33,13 @@ Defined in `src/lib/ask/tools.ts` by `askTools(ctx)`. Every paper a tool returns
 
 | Tool | Behaviour |
 |---|---|
-| `search_index` | `research_signal.hybrid_search`, top 20, plus each hit's cosine to the query and its rung. Hits with cosine ≥ 0.35 count as relevant. |
+| `search_index` | `research_signal.hybrid_search`, top 20, plus each hit's cosine to the query (the function's `similarity` column once `scripts/sql/007` is applied) and its rung. Hits with cosine ≥ 0.55 count as relevant. The threshold is measured: off-topic queries ("medieval cheese fermentation", "sourdough baking") top out at 0.46–0.50, on-topic AI queries have their 5th-best hit at 0.57–0.62. |
 | `get_papers` | Card fields for up to 10 refs or ids: abstract (700 characters), authors, per-domain verdict, final score, client angle, risk flags, latest signals and rung. |
 | `trend` | One SQL query grouping by `date_trunc('week', coalesce(announced_at, submitted_at))`. It returns paper counts, the rung mix, summed HF upvotes and the top 3 papers (rising first) per week, plus a momentum label: rising, steady, fading or unknown. `coalesce` keeps backstop and live papers, which have no `announced_at`. |
 | `related` | The 8 nearest papers by `papers.embedding`, plus `builds_on` from the latest signals when it is non-null. |
 | `my_log` | The consultant's `actions`: action, note, client tag and date. Filters are action, client tag (substring), since and a title or note match. |
 | `get_fulltext` | `getFullText` (D10: arXiv HTML, then Unpaywall). The text is wrapped in `<untrusted_paper_text>`. At most 2 per question. |
-| `live_search` | Hugging Face only: `GET https://huggingface.co/api/papers/search?q=`, top 10. It is allowed only when `search_index` found fewer than 5 hits with cosine ≥ 0.35, or when the routed `since` is earlier than the first indexed paper. It runs once per question. New papers are inserted with `source = 'live'` and status `PREFILTERED`, `paper_domain` rows are added for the routed domains (all active domains when none were routed), HF upvotes and GitHub signals are written, and `embed2` is enqueued so the papers become searchable. |
+| `live_search` | Hugging Face only: `GET https://huggingface.co/api/papers/search?q=`, top 10. It is allowed only when `search_index` found fewer than 5 hits with cosine ≥ 0.55, or when the routed `since` is earlier than the first indexed paper. It runs once per question. New papers are inserted with `source = 'live'` and status `PREFILTERED`, `paper_domain` rows are added for the routed domains (all active domains when none were routed), HF upvotes and GitHub signals are written, and `embed2` is enqueued so the papers become searchable. |
 
 Tools by intent:
 
@@ -58,8 +59,10 @@ Tools by intent:
 - At most 2 `get_fulltext` calls and 1 `live_search` call per question.
 - `search_index` returns the top 20, `related` returns k = 8, and `my_log` returns the latest 30 entries.
 - Prompt: 2,000 characters. History: the last 6 messages of the thread, with their old `[pN]` refs removed.
-- Model: `app_settings.chat_model`, which must start with `google/`. Reasoning effort is `minimal`.
-- Cost: the answer steps are logged under stage `ask`, the router under `ask_route`, the repair under `ask_repair` and the query embeddings under `search_query`. `ask_messages.cost_usd` sums those stages from the request start. This is exact for a single user. Overlapping requests can be counted together.
+- Model: `app_settings.chat_model`, which must start with `google/`. The answer's thinking is capped at 512 tokens per step; routing and repair use reasoning effort `minimal`.
+- `get_fulltext` uses the CORE fallback only while the `core` source is enabled and has a key.
+- Cost: every call of one request passes its stage as `<stage>#<message id>` (`ask`, `ask_route`, `ask_repair`, `search_query`). A trigger from `scripts/sql/009_llm_call_request.sql` stores the id in `llm_calls.request_id` and keeps the plain stage, and `ask_messages.cost_usd` is the sum of that request's rows only.
+- Errors: a 402 before streaming returns `402 {"error":"llm_credits_exhausted"}`; during streaming the stream's error part carries the text `llm_credits_exhausted`, and the panel shows a credits message for both.
 
 ## Evidence tokens
 
@@ -71,5 +74,6 @@ Titles, abstracts, notes, full text and every other string in a tool result are 
 
 ## API
 
-- `POST /api/ask` with body `{threadId?, prompt}`. It returns an AI SDK UI message stream. The `start` part's metadata carries `{threadId, messageId, intent}`. The `finish` part's metadata adds `confidence`, `coverage`, `citations` and `evidence`, computed from the draft.
+- `POST /api/ask` with body `{threadId?, prompt}`. It returns an AI SDK UI message stream. The `start` part's metadata carries `{threadId, messageId, intent}`. The `finish` part's metadata adds `confidence`, `coverage`, `citations` and `evidence`, computed from the validated answer, which is saved before the `finish` part is sent.
 - `GET /api/ask?threadId=<uuid>` returns the thread's saved messages. These include the validated or repaired answer, which can differ from the streamed draft.
+- `/ask?q=<question>` (the command bar's Ask link) opens a new thread and asks the question once. The panel uses `useChat` from `@ai-sdk/react` and, when the answer ends, replaces the streamed draft with the saved answer.

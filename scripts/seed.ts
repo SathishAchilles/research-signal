@@ -50,8 +50,6 @@ const sources: SourceSeed[] = [
     params: {
       categories: ["cs.AI", "cs.CL", "cs.LG", "cs.CV", "cs.IR", "cs.SE"],
       backstopDays: 4,
-      maxResults: 2000,
-      minIntervalMs: 3100,
     },
   },
   {

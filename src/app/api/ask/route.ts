@@ -1,6 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { generateText, type ModelMessage, stepCountIs, streamText, type UIMessage } from "ai";
-import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
+import {
+  APICallError,
+  createUIMessageStream,
+  createUIMessageStreamResponse,
+  generateText,
+  type ModelMessage,
+  RetryError,
+  stepCountIs,
+  streamText,
+  type UIMessage,
+} from "ai";
+import { asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { db } from "@/db/client";
@@ -13,12 +23,14 @@ import {
   citedRefs,
   coverageLine,
   fillEvidenceTokens,
+  formatCount,
   validateAnswer,
+  withVerdictConfidence,
 } from "@/lib/ask/answer";
 import { type Confidence, confidence } from "@/lib/ask/grade";
 import { playbookFor, systemPrompt } from "@/lib/ask/playbooks";
 import { type RoutedIntent, routeIntent } from "@/lib/ask/route-intent";
-import { type AskContext, type AskTools, askTools, createAskContext, initialSearch } from "@/lib/ask/tools";
+import { type AskContext, type AskTools, askTools, createAskContext, initialSearch, stageFor } from "@/lib/ask/tools";
 import { LlmCreditsExhausted, llmCall } from "@/lib/llm/call";
 import { chatModel } from "@/lib/llm/openrouter";
 import { upsertSearchDoc } from "@/lib/search/index";
@@ -26,14 +38,21 @@ import { upsertSearchDoc } from "@/lib/search/index";
 export const maxDuration = 300;
 
 const MAX_STEPS = 6;
+// Tool rounds the model may spend before it must write; the first search and the top cards are preloaded.
+const TOOL_ROUNDS = 2;
+// Thinking budget per step. It counts against maxOutputTokens, so the answer budget is added on top.
+const REASONING_TOKENS = 512;
+const TOKENS_PER_WORD = 2;
 const HISTORY_MESSAGES = 6;
 const REPAIR_DATA_CHARS = 30_000;
-const COST_STAGES = ["ask_route", "ask", "ask_repair", "search_query"];
+const CREDITS = "llm_credits_exhausted";
 
 const BodySchema = z.object({
   threadId: z.uuid().optional(),
   prompt: z.string().trim().min(1).max(2000),
 });
+
+type AskUIMessage = UIMessage<AskMetadata>;
 
 type Finished = {
   content: string;
@@ -78,6 +97,18 @@ async function history(threadId: string | undefined): Promise<ModelMessage[]> {
   }));
 }
 
+async function threadTitle(threadId: string | undefined): Promise<string | null> {
+  if (!threadId) return null;
+  const [thread] = await db.select({ title: askThreads.title }).from(askThreads).where(eq(askThreads.id, threadId));
+  return thread?.title ?? null;
+}
+
+async function domainNamesOf(ids: number[]): Promise<string[]> {
+  if (ids.length === 0) return [];
+  const rows = await db.select({ name: domains.name }).from(domains).where(inArray(domains.id, ids)).orderBy(asc(domains.id));
+  return rows.map((d) => d.name);
+}
+
 function evidenceOf(ctx: AskContext): AskEvidence {
   return Object.fromEntries([...ctx.refs.values()].map((r) => [r.ref, r.evidence]));
 }
@@ -102,10 +133,32 @@ function coverageOf(base: Awaited<ReturnType<typeof indexCoverage>>, ctx: AskCon
   return { ...c, line: coverageLine(c) };
 }
 
-async function repair(model: string, system: string, draft: string, errors: string[], ctx: AskContext): Promise<string> {
+function statusOf(error: unknown): number | undefined {
+  const inner = RetryError.isInstance(error) ? error.lastError : error;
+  return APICallError.isInstance(inner) ? inner.statusCode : undefined;
+}
+
+function isCreditsError(error: unknown): boolean {
+  return error instanceof LlmCreditsExhausted || statusOf(error) === 402;
+}
+
+// The text of a stream error part; the panel maps CREDITS to its own message.
+function errorText(error: unknown): string {
+  if (isCreditsError(error)) return CREDITS;
+  console.error(`ask failed: ${error instanceof Error ? error.message : String(error)}`);
+  return "The answer failed. Try again.";
+}
+
+async function repair(
+  model: string,
+  system: string,
+  draft: string,
+  errors: string[],
+  ctx: AskContext,
+): Promise<string> {
   const refs = [...ctx.refs.values()].map((r) => `${r.ref}: ${r.title}`).join("\n");
   const data = ctx.retrieved.join("\n").slice(0, REPAIR_DATA_CHARS);
-  const { text } = await llmCall("ask_repair", model, () =>
+  const { text } = await llmCall(stageFor(ctx, "ask_repair"), model, () =>
     generateText({
       model: chatModel(model),
       system,
@@ -113,7 +166,7 @@ async function repair(model: string, system: string, draft: string, errors: stri
         "Your draft answer failed these checks:",
         ...errors.map((e) => `- ${e}`),
         "",
-        "Rewrite the whole answer so every check passes. Keep the template, keep only citations from the list of known refs, and copy numbers only from the retrieved data. Return only the answer.",
+        "Rewrite the whole answer so every check passes. Keep the template, keep only citations from the list of known refs, and copy numbers only from the retrieved data about the papers you cite. Return only the answer.",
         "",
         `<known_refs>\n${refs}\n</known_refs>`,
         `<untrusted_retrieved_data>\n${data}\n</untrusted_retrieved_data>`,
@@ -130,19 +183,20 @@ async function repair(model: string, system: string, draft: string, errors: stri
 async function finish(args: {
   draft: string;
   ctx: AskContext;
-  prompt: string;
+  isBet: boolean;
   model: string;
   system: string;
   wordCap: number;
+  context: string;
   coverageBase: Awaited<ReturnType<typeof indexCoverage>>;
 }): Promise<Finished> {
-  const { ctx, prompt, model, system, wordCap } = args;
+  const { ctx, model, system, wordCap } = args;
   const check = (text: string) =>
     validateAnswer(text, {
       knownRefs: new Set(ctx.refs.keys()),
       evidence: evidenceOf(ctx),
-      retrieved: ctx.retrieved.join("\n"),
-      prompt,
+      paperData: Object.fromEntries([...ctx.refs.values()].map((r) => [r.ref, r.data.join("\n")])),
+      context: args.context,
       wordCap,
     });
 
@@ -150,6 +204,7 @@ async function finish(args: {
   let errors = check(text);
   let warning: string | undefined;
   if (errors.length > 0) {
+    console.warn(`ask draft failed ${errors.length} checks: ${errors.slice(0, 5).join("; ")}`);
     try {
       const repaired = await repair(model, system, text, errors, ctx);
       const repairedErrors = check(repaired);
@@ -163,43 +218,57 @@ async function finish(args: {
     if (errors.length > 0) warning = "This answer did not pass every evidence check; verify the cited papers before using it.";
   }
 
+  const graded = grade(ctx, text);
+  if (args.isBet) text = withVerdictConfidence(text, graded);
   const coverage = coverageOf(args.coverageBase, ctx);
   return {
     content: fillEvidenceTokens(text, evidenceOf(ctx)),
     citations: citationsOf(ctx, text),
-    confidence: grade(ctx, text),
+    confidence: graded,
     coverage: { ...coverage, ...(warning ? { warning, errors } : {}) },
   };
 }
 
-async function requestCost(started: Date): Promise<number | null> {
-  const [row] = await db
-    .select({ cost: sql<number | null>`sum(${llmCalls.costUsd})` })
-    .from(llmCalls)
-    .where(and(gte(llmCalls.createdAt, started), inArray(llmCalls.stage, COST_STAGES)));
+// Only this request's calls: their llm_calls rows carry its id (scripts/sql/009).
+async function requestCost(requestId: string): Promise<number | null> {
+  const [row] = await db.execute<{ cost: number | null }>(sql`
+    select sum(cost_usd)::float8 as cost from research_signal.llm_calls where request_id = ${requestId}::uuid`);
   return row?.cost === null || row?.cost === undefined ? null : Number(row.cost);
 }
 
+// The thread, the question and the answer are written together, so a failed answer leaves no rows.
 async function save(args: {
   threadId: string;
+  newThread: boolean;
   messageId: string;
   title: string;
+  prompt: string;
   routed: RoutedIntent;
   finished: Finished;
   started: Date;
 }) {
   const { threadId, messageId, finished, routed } = args;
-  await db.insert(askMessages).values({
-    id: messageId,
-    threadId,
-    role: "assistant",
-    content: finished.content,
-    intent: routed.bareTerm ? "EXPLAIN+CATCHUP" : routed.intent,
-    citations: finished.citations,
-    confidence: finished.confidence,
-    coverage: finished.coverage,
-    costUsd: await requestCost(args.started),
+  const costUsd = await requestCost(messageId);
+  await db.transaction(async (tx) => {
+    if (args.newThread) await tx.insert(askThreads).values({ id: threadId, title: args.title });
+    await tx.insert(askMessages).values({ threadId, role: "user", content: args.prompt, createdAt: args.started });
+    await tx.insert(askMessages).values({
+      id: messageId,
+      threadId,
+      role: "assistant",
+      content: finished.content,
+      intent: routed.bareTerm ? "EXPLAIN+CATCHUP" : routed.intent,
+      citations: finished.citations,
+      confidence: finished.confidence,
+      coverage: finished.coverage,
+      costUsd,
+    });
   });
+}
+
+// Indexing embeds the answer, so it runs after the finish part has been sent.
+async function indexAnswer(args: { messageId: string; title: string; routed: RoutedIntent; finished: Finished }) {
+  const { messageId, finished, routed } = args;
   try {
     await upsertSearchDoc({
       entityType: "answer",
@@ -213,112 +282,153 @@ async function save(args: {
   }
 }
 
+function preface(coverage: Awaited<ReturnType<typeof indexCoverage>>, strong: number, routed: RoutedIntent): string {
+  const since = routed.since ? ` since ${routed.since}` : "";
+  return `_Searched ${formatCount(coverage.indexed)} indexed papers${since}: ${strong} close matches. Writing the answer…_\n\n`;
+}
+
 export async function POST(request: NextRequest) {
   const parsed = BodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: z.prettifyError(parsed.error) }, { status: 400 });
   const { prompt } = parsed.data;
   const started = new Date();
+  // One id for the answer row and for this request's llm_calls rows.
+  const messageId = randomUUID();
+  const newThread = !parsed.data.threadId;
+  const threadId = parsed.data.threadId ?? randomUUID();
 
-  let routed: RoutedIntent;
-  let coverageBase: Awaited<ReturnType<typeof indexCoverage>>;
-  let settings: Awaited<ReturnType<typeof loadSettings>>;
-  let past: ModelMessage[];
+  // Everything that can fail before the answer starts runs here, so failures are plain JSON
+  // responses and no thread or message rows are written.
+  let prepared;
   try {
-    [routed, coverageBase, settings, past] = await Promise.all([
-      routeIntent(prompt, started),
+    const [routed, coverageBase, settings, past, existingTitle] = await Promise.all([
+      routeIntent(prompt, started, messageId),
       indexCoverage(),
       loadSettings(),
       history(parsed.data.threadId),
+      threadTitle(parsed.data.threadId),
     ]);
+    if (!newThread && existingTitle === null) return NextResponse.json({ error: "Unknown thread" }, { status: 404 });
+    const ctx = createAskContext(routed, coverageBase.firstIndexedAt, messageId);
+    const [first, domainNames] = await Promise.all([
+      initialSearch(ctx, routed.entities.join(" ") || prompt),
+      domainNamesOf(routed.domains),
+    ]);
+    prepared = { routed, coverageBase, settings, past, title: existingTitle ?? prompt.slice(0, 120), ctx, first, domainNames };
   } catch (error) {
-    if (error instanceof LlmCreditsExhausted) {
-      return NextResponse.json({ error: "llm_credits_exhausted" }, { status: 402 });
-    }
-    throw error;
+    if (isCreditsError(error)) return NextResponse.json({ error: CREDITS }, { status: 402 });
+    console.error(`ask failed before streaming: ${error instanceof Error ? error.message : String(error)}`);
+    return NextResponse.json({ error: "ask_failed" }, { status: 500 });
   }
+  const { routed, coverageBase, settings, past, title, ctx, first, domainNames } = prepared;
 
-  let threadId = parsed.data.threadId;
-  let title = prompt.slice(0, 120);
-  if (threadId) {
-    const [thread] = await db.select({ title: askThreads.title }).from(askThreads).where(eq(askThreads.id, threadId));
-    if (!thread) return NextResponse.json({ error: "Unknown thread" }, { status: 404 });
-    title = thread.title;
-  } else {
-    const [thread] = await db.insert(askThreads).values({ title }).returning({ id: askThreads.id });
-    threadId = thread.id;
-  }
-  await db.insert(askMessages).values({ threadId, role: "user", content: prompt });
-
-  const ctx = createAskContext(routed, coverageBase.firstIndexedAt);
   const { intents, tools: names, template } = playbookFor(routed);
   const all = askTools(ctx);
   const tools = Object.fromEntries(names.map((name) => [name, all[name]])) as Partial<AskTools>;
-  const domainNames = routed.domains.length
-    ? (await db.select({ name: domains.name }).from(domains).where(inArray(domains.id, routed.domains)).orderBy(asc(domains.id))).map(
-        (d) => d.name,
-      )
-    : [];
-  const system = systemPrompt(routed, template, intents, {
-    wordCap: settings.wordCap,
-    domainNames,
-    today: started.toISOString().slice(0, 10),
-  });
+  const today = started.toISOString().slice(0, 10);
+  const systemFor = () =>
+    systemPrompt(routed, template, intents, {
+      wordCap: settings.wordCap,
+      domainNames,
+      today,
+      toolRounds: TOOL_ROUNDS,
+      confidence: confidence([...ctx.refs.values()].filter((r) => r.relevant)),
+    });
   const model = settings.chatModel;
-  const messageId = randomUUID();
   const intentLabel = intents.join("+");
-  let draft = "";
-  const first = await initialSearch(ctx, routed.entities.join(" ") || prompt);
   const userContent = [
     prompt,
     "",
     `<search_index_result input='${JSON.stringify(first.input)}'>`,
     JSON.stringify(first.output),
     "</search_index_result>",
+    "<get_papers_result>",
+    JSON.stringify({ papers: first.papers }),
+    "</get_papers_result>",
   ].join("\n");
+  // Numbers that do not belong to one paper: the question, its dates, the template and trend output.
+  const context = () => [prompt, today, routed.since ?? "", template, ...ctx.aggregates].join("\n");
 
-  const result = streamText({
-    model: chatModel(model),
-    system,
-    messages: [...past, { role: "user", content: userContent }],
-    tools,
-    stopWhen: stepCountIs(MAX_STEPS),
-    // The last step may not call tools, so the answer is always written.
-    prepareStep: ({ stepNumber }) => (stepNumber >= MAX_STEPS - 1 ? { toolChoice: "none" as const } : undefined),
-    temperature: 0.3,
-    maxRetries: 1,
-    providerOptions: { openrouter: { reasoning: { effort: "minimal" } } },
-    onChunk: ({ chunk }) => {
-      if (chunk.type === "text-delta") draft += chunk.text;
-    },
-    onStepFinish: async (step) => {
-      await llmCall("ask", model, async () => step);
-    },
-    onError: ({ error }) => {
-      console.error(`ask stream failed: ${error instanceof Error ? error.message : String(error)}`);
-    },
-    onFinish: async ({ text }) => {
-      const finished = await finish({ draft: text || draft, ctx, prompt, model, system, wordCap: settings.wordCap, coverageBase });
-      await save({ threadId, messageId, title, routed, finished, started });
+  const stream = createUIMessageStream<AskUIMessage>({
+    onError: errorText,
+    execute: async ({ writer }) => {
+      writer.write({ type: "start", messageMetadata: { threadId, messageId, intent: intentLabel } });
+      // A short preface goes out before the model starts; the saved answer does not include it.
+      const prefaceId = `preface-${messageId}`;
+      writer.write({ type: "text-start", id: prefaceId });
+      writer.write({ type: "text-delta", id: prefaceId, delta: preface(coverageBase, first.output.strongHits, routed) });
+      writer.write({ type: "text-end", id: prefaceId });
+
+      let streamError: unknown;
+      const logged: Promise<unknown>[] = [];
+      const result = streamText({
+        model: chatModel(model, { reasoning: { max_tokens: REASONING_TOKENS } }),
+        system: systemFor(),
+        messages: [...past, { role: "user", content: userContent }],
+        tools,
+        stopWhen: stepCountIs(MAX_STEPS),
+        // After TOOL_ROUNDS rounds the model may not call tools, so it writes; the system prompt is
+        // rebuilt each step so the confidence it is given reflects the papers found so far.
+        prepareStep: ({ stepNumber }) => ({
+          system: systemFor(),
+          ...(stepNumber >= TOOL_ROUNDS ? { toolChoice: "none" as const } : {}),
+        }),
+        maxOutputTokens: REASONING_TOKENS + settings.wordCap * TOKENS_PER_WORD,
+        temperature: 0.3,
+        maxRetries: 1,
+        onStepFinish: (step) => {
+          logged.push(llmCall(stageFor(ctx, "ask"), model, async () => step).catch(() => undefined));
+        },
+        onError: ({ error }) => {
+          streamError = error;
+          if (statusOf(error) === 402) {
+            logged.push(db.insert(llmCalls).values({ stage: stageFor(ctx, "ask"), model, status: "credits_exhausted" }).catch(() => undefined));
+          }
+        },
+      });
+
+      let draft = "";
+      for await (const chunk of result.toUIMessageStream<AskUIMessage>({
+        sendStart: false,
+        sendFinish: false,
+        sendReasoning: false,
+        onError: errorText,
+      })) {
+        if (chunk.type === "text-delta") draft += chunk.delta;
+        writer.write(chunk);
+      }
+      await Promise.all(logged);
+      // The stream already carries the error part; nothing is saved for a failed answer.
+      if (streamError !== undefined) return;
+
+      const finished = await finish({
+        draft,
+        ctx,
+        isBet: intents.includes("BET"),
+        model,
+        system: systemFor(),
+        wordCap: settings.wordCap,
+        context: context(),
+        coverageBase,
+      });
+      await save({ threadId, newThread, messageId, title, prompt, routed, finished, started });
+      writer.write({
+        type: "finish",
+        messageMetadata: {
+          threadId,
+          messageId,
+          intent: intentLabel,
+          confidence: finished.confidence,
+          coverage: finished.coverage,
+          citations: finished.citations,
+          evidence: evidenceOf(ctx),
+        },
+      });
+      await indexAnswer({ messageId, title, routed, finished });
     },
   });
 
-  return result.toUIMessageStreamResponse<UIMessage<AskMetadata>>({
-    sendReasoning: false,
-    messageMetadata: ({ part }): AskMetadata | undefined => {
-      if (part.type === "start") return { threadId, messageId, intent: intentLabel };
-      if (part.type !== "finish") return undefined;
-      const coverage = coverageOf(coverageBase, ctx);
-      return {
-        threadId,
-        messageId,
-        intent: intentLabel,
-        confidence: grade(ctx, draft),
-        coverage,
-        citations: citationsOf(ctx, draft),
-        evidence: evidenceOf(ctx),
-      };
-    },
-  });
+  return createUIMessageStreamResponse({ stream });
 }
 
 // Messages of one thread, for reloading the saved (validated) answer after streaming.

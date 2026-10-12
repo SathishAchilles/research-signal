@@ -40,7 +40,12 @@ async function main() {
 
   const started = Date.now();
   await run(args);
-  console.log(`smoke:${name} ok in ${Date.now() - started} ms`);
+  // A smoke test may report failure by setting process.exitCode instead of throwing.
+  if (Number(process.exitCode ?? 0) !== 0) {
+    console.error(`smoke:${name} failed (exit code ${process.exitCode}) in ${Date.now() - started} ms`);
+  } else {
+    console.log(`smoke:${name} ok in ${Date.now() - started} ms`);
+  }
 }
 
 main().catch((error: unknown) => {

@@ -7,7 +7,7 @@ const MODEL_LISTS = [
   "https://openrouter.ai/api/v1/embeddings/models",
 ];
 
-async function fetchIds(url: string): Promise<string[]> {
+export async function fetchIds(url: string): Promise<string[]> {
   const response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
   if (!response.ok) throw new Error(`GET ${url} failed with HTTP ${response.status}`);
   const body = (await response.json()) as { data?: { id?: unknown }[] };

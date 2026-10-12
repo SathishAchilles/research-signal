@@ -2,8 +2,8 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { appSettings } from "@/db/schema";
 import type { Rung, SignalType, Verdict } from "@/lib/pipeline/rank";
-import type { BriefCard, BriefSelection, DomainSelection, Evidence, SourceHealth, Tier } from "./types";
-import { domainSlug } from "./types";
+import type { BriefCard, BriefSelection, DomainSelection, Evidence, RerankOverrides, SourceHealth, Tier } from "./types";
+import { domainSlug, overrideKey } from "./types";
 import type { BriefWindow } from "./window";
 
 export type { BriefSelection } from "./types";
@@ -181,10 +181,18 @@ function toCard(r: Row, cardId: string, tier: Tier): BriefCard {
 
 const byFinal = (a: Row, b: Row) => Number(b.final_score) - Number(a.final_score);
 
+function withOverride(r: Row, overrides: RerankOverrides | undefined): Row {
+  const o = overrides?.get(overrideKey(r.paper_id, Number(r.domain_id)));
+  return o
+    ? { ...r, final_score: o.final, verdict: o.verdict, signal_type: o.signalType, novelty: o.novelty, client_angle: o.clientAngle }
+    : r;
+}
+
 // Picks the brief's papers for one window (design D13). Each paper appears once, in the domain
-// where it scores highest; earlier briefs' papers only return through the rising lane.
-export async function selectBrief(window: BriefWindow): Promise<BriefSelection> {
-  const [thresholds, rows, rising, health, active] = await Promise.all([
+// where it scores highest; earlier briefs' papers only return through the rising lane. `overrides`
+// overlays re-judged scores that were not written to paper_domain (dry and preview runs).
+export async function selectBrief(window: BriefWindow, overrides?: RerankOverrides): Promise<BriefSelection> {
+  const [thresholds, stored, rising, health, active] = await Promise.all([
     loadTierThresholds(),
     windowRows(window),
     risingRows(window),
@@ -193,6 +201,7 @@ export async function selectBrief(window: BriefWindow): Promise<BriefSelection> 
       select id, name from research_signal.domains where active order by id`),
   ]);
 
+  const rows = stored.map((r) => withOverride(r, overrides));
   const fresh = rows.filter((r) => !r.sent_before);
   const best = new Map<string, Row>();
   for (const r of [...fresh].sort(byFinal)) if (!best.has(r.paper_id)) best.set(r.paper_id, r);
@@ -237,14 +246,18 @@ export async function selectBrief(window: BriefWindow): Promise<BriefSelection> 
       .slice(0, TIER_CAPS.compact)
       .map((r) => add(r, "COMPACT"));
 
-    const domainRows = fresh.filter((r) => Number(r.domain_id) === domainId).sort(byFinal);
-    if (!domainRows.some((r) => Number(r.final_score) >= thresholds.compact)) {
-      section.quiet = true;
-      const miss = domainRows[0];
-      section.nearestMiss = miss ? { paperId: miss.paper_id, title: miss.title, final: Number(miss.final_score) } : null;
-    }
     return section;
   });
+
+  // Quiet means no paper was placed in the domain (a qualifying paper may sit in a domain where it
+  // scores higher). The nearest miss prefers a paper shown nowhere else in the brief.
+  for (const section of domains) {
+    if (section.hero || section.standard.length || section.compact.length) continue;
+    section.quiet = true;
+    const domainRows = fresh.filter((r) => Number(r.domain_id) === section.domainId).sort(byFinal);
+    const miss = domainRows.find((r) => !cardOf.has(r.paper_id)) ?? domainRows[0];
+    section.nearestMiss = miss ? { paperId: miss.paper_id, title: miss.title, final: Number(miss.final_score) } : null;
+  }
 
   const top3 = [...top3Papers].map((paperId) => cardOf.get(paperId)).filter((id): id is string => Boolean(id));
   for (const id of top3) cards[id].inTop3 = true;

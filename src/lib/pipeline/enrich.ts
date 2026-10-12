@@ -71,6 +71,9 @@ async function enrichHf(): Promise<SourceOutcome> {
   if (rows.length === 0) return { status: "OK", items: 0 };
   const details = await fetchDetail(rows.map((r) => r.arxiv_id), await getSourceSecret("hf"));
   const written = await writeHfSignals(details);
+  if (details.failed > 0) {
+    return { status: "PARTIAL", items: written, error: `${details.failed} of ${rows.length} HF detail requests failed` };
+  }
   return { status: "OK", items: written };
 }
 
@@ -82,7 +85,9 @@ function openReviewQuota(params: unknown, now: Date): number {
 }
 
 // sources.cursor.checked records when each paper was last looked up, so unknown or still-under-review
-// papers are searched again only after OPENREVIEW_RECHECK_DAYS.
+// papers are searched again only after OPENREVIEW_RECHECK_DAYS. An unexpected error still writes the
+// matches found before it and is reported as FAILED with that count; it is never replaced by a later
+// insert or cursor error.
 async function enrichOpenReview(params: unknown): Promise<SourceOutcome> {
   const now = new Date();
   const today = now.toISOString().slice(0, 10);
@@ -111,6 +116,7 @@ async function enrichOpenReview(params: unknown): Promise<SourceOutcome> {
   let looked = 0;
   let written = 0;
   let error: string | undefined;
+  let failure: unknown;
   try {
     for (const paper of due) {
       const match = await matchVenue(paper.title);
@@ -126,17 +132,22 @@ async function enrichOpenReview(params: unknown): Promise<SourceOutcome> {
       }
     }
   } catch (e) {
-    if (!(e instanceof SourceUnavailable)) throw e;
-    error = errorMessage(e);
-  } finally {
-    // Matches found before an error are written first; the cursor follows, so a failed insert
-    // leaves those papers due again instead of marking them checked.
+    if (e instanceof SourceUnavailable) error = errorMessage(e);
+    else failure = e;
+  }
+  // Matches found before an error are written first; the cursor follows, so a failed insert
+  // leaves those papers due again instead of marking them checked.
+  try {
     written = await insertSignals(rows);
     await db
       .update(sources)
       .set({ cursor: { ...(row?.cursor ?? {}), checked } })
       .where(eq(sources.kind, "openreview"));
+  } catch (e) {
+    if (failure === undefined) failure = e;
+    else console.warn(`openreview enrich: write after an error also failed: ${errorMessage(e)}`);
   }
+  if (failure !== undefined) return { status: "FAILED", items: written, error: errorMessage(failure) };
   return { status: error ? "PARTIAL" : "OK", items: written, error: error ?? (looked ? undefined : "no papers due") };
 }
 
@@ -162,6 +173,8 @@ async function enrichS2(): Promise<SourceOutcome> {
       ];
     }),
   );
+  // batchLookup stops at the first failing chunk and returns the earlier chunks with `error` set.
+  if (found.error) return { status: "PARTIAL", items: written, error: found.error };
   return { status: "OK", items: written };
 }
 

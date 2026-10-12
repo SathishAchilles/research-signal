@@ -12,9 +12,12 @@ const THREAD_LIMIT = 50;
 
 async function AskView({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await connection();
-  const raw = (await searchParams).thread;
-  const parsed = z.uuid().safeParse(Array.isArray(raw) ? raw[0] : raw);
+  const params = await searchParams;
+  const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+  const parsed = z.uuid().safeParse(first(params.thread));
   const threadId = parsed.success ? parsed.data : undefined;
+  // /ask?q=… (from the command bar) asks the question in a new thread.
+  const q = first(params.q)?.trim().slice(0, 2000) || undefined;
 
   const [threads, active, saved] = await Promise.all([
     db
@@ -63,7 +66,13 @@ async function AskView({ searchParams }: { searchParams: Promise<Record<string, 
           </Link>
         ))}
       </nav>
-      <AskPanel key={thread?.id ?? "new"} threadId={thread?.id} title={thread?.title} saved={thread ? saved : []} />
+      <AskPanel
+        key={thread?.id ?? "new"}
+        threadId={thread?.id}
+        title={thread?.title}
+        saved={thread ? saved : []}
+        initialPrompt={thread ? undefined : q}
+      />
     </div>
   );
 }

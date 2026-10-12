@@ -1,4 +1,5 @@
 import { mkdirSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { desc, isNotNull } from "drizzle-orm";
 import { db } from "@/db/client";
@@ -85,10 +86,11 @@ export default async function run(args: string[]) {
       : await db.select({ json: briefs.json }).from(briefs).where(isNotNull(briefs.json)).orderBy(desc(briefs.windowStart)).limit(1);
     const doc = (latest?.json as BriefDoc | undefined) ?? fixture(4);
     const out = renderEmail(doc);
-    const file = path.join(process.cwd(), "tmp/email-preview.html");
+    // Previews go outside the repo so each run does not churn the tracked tmp/email-preview.html.
+    const file = process.env.EMAIL_PREVIEW_PATH ?? path.join(os.tmpdir(), "research-signal", "email-preview.html");
     mkdirSync(path.dirname(file), { recursive: true });
     writeFileSync(file, out.html);
-    console.log(`${latest ? `brief ${doc.selection.isoWeek} from the database` : "fixture brief"}: wrote ${path.relative(process.cwd(), file)}`);
+    console.log(`${latest ? `brief ${doc.selection.isoWeek} from the database` : "fixture brief"}: wrote ${file}`);
     console.log(`bytes ${out.bytes} (limit ${EMAIL_BYTE_LIMIT}), moved to the web: ${out.webOnly.join(", ") || "nothing"}`);
     if (out.bytes >= EMAIL_BYTE_LIMIT) throw new Error("email is over the byte limit");
     for (const cue of ["BRING TO CLIENT", "READ", "SKIP", "[#---] LAB", "[####] PEER", "BENCH", "EVAL", "REFRAME", "METHOD"]) {

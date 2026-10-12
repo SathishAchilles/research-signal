@@ -1,16 +1,10 @@
 "use client";
 
-import {
-  AbstractChat,
-  type ChatInit,
-  type ChatState,
-  type ChatStatus,
-  DefaultChatTransport,
-  type UIMessage,
-} from "ai";
+import { Chat, useChat } from "@ai-sdk/react";
+import { DefaultChatTransport, type UIMessage } from "ai";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Fragment, type ReactNode, useMemo, useState, useSyncExternalStore } from "react";
+import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,92 +17,6 @@ import {
 } from "@/lib/ask/answer";
 
 type AskMessage = UIMessage<AskMetadata>;
-
-// Stand-in for useChat from @ai-sdk/react (same return shape) until that package is installed.
-class StoreChatState<M extends UIMessage> implements ChatState<M> {
-  private listeners = new Set<() => void>();
-  private current: M[];
-  private currentStatus: ChatStatus = "ready";
-  private currentError: Error | undefined;
-  version = 0;
-
-  constructor(messages: M[]) {
-    this.current = messages;
-  }
-
-  get messages() {
-    return this.current;
-  }
-  set messages(messages: M[]) {
-    this.current = [...messages];
-    this.notify();
-  }
-  get status() {
-    return this.currentStatus;
-  }
-  set status(status: ChatStatus) {
-    this.currentStatus = status;
-    this.notify();
-  }
-  get error() {
-    return this.currentError;
-  }
-  set error(error: Error | undefined) {
-    this.currentError = error;
-    this.notify();
-  }
-  pushMessage = (message: M) => {
-    this.current = [...this.current, message];
-    this.notify();
-  };
-  popMessage = () => {
-    this.current = this.current.slice(0, -1);
-    this.notify();
-  };
-  replaceMessage = (index: number, message: M) => {
-    this.current = [...this.current.slice(0, index), this.snapshot(message), ...this.current.slice(index + 1)];
-    this.notify();
-  };
-  snapshot = <T,>(thing: T): T => structuredClone(thing);
-  subscribe = (listener: () => void) => {
-    this.listeners.add(listener);
-    return () => {
-      this.listeners.delete(listener);
-    };
-  };
-  private notify() {
-    this.version++;
-    for (const listener of this.listeners) listener();
-  }
-}
-
-// Mirrors Chat and useChat({ chat }) from @ai-sdk/react; swap the import once that package is installed.
-class Chat<M extends UIMessage> extends AbstractChat<M> {
-  private store: StoreChatState<M>;
-
-  constructor({ messages, ...init }: ChatInit<M>) {
-    const store = new StoreChatState<M>(messages ?? []);
-    super({ ...init, state: store });
-    this.store = store;
-  }
-
-  subscribe = (listener: () => void) => this.store.subscribe(listener);
-  getVersion = () => this.store.version;
-  setMessages = (update: M[] | ((messages: M[]) => M[])) => {
-    this.messages = typeof update === "function" ? update(this.messages) : update;
-  };
-}
-
-function useChat<M extends UIMessage>({ chat }: { chat: Chat<M> }) {
-  useSyncExternalStore(chat.subscribe, chat.getVersion, chat.getVersion);
-  return {
-    messages: chat.messages,
-    status: chat.status,
-    error: chat.error,
-    sendMessage: chat.sendMessage,
-    setMessages: chat.setMessages,
-  };
-}
 
 export type SavedAskMessage = {
   id: string;
@@ -242,6 +150,15 @@ function Markdown({ text, cites }: { text: string; cites: Map<string, AskCitatio
       );
       continue;
     }
+    const note = line.match(/^_(.+)_$/);
+    if (note) {
+      blocks.push(
+        <p key={i} className="italic text-muted-foreground">
+          {note[1]}
+        </p>,
+      );
+      continue;
+    }
     blocks.push(<p key={i}>{inline(line, cites)}</p>);
   }
   return <div className="flex flex-col gap-1.5 text-sm leading-6">{blocks}</div>;
@@ -339,17 +256,34 @@ function Answer({ message, title, streaming }: { message: AskMessage; title: str
   );
 }
 
+// A 402 arrives as a JSON body (before streaming) or as the stream's error text.
+function errorMessage(error: Error): string {
+  if (error.message.includes("llm_credits_exhausted")) {
+    return "OpenRouter credits are exhausted. Add credits, then ask again.";
+  }
+  try {
+    const body = JSON.parse(error.message) as { error?: unknown };
+    if (typeof body.error === "string") return `The answer failed: ${body.error}`;
+  } catch {
+    // Not JSON: show the message as is.
+  }
+  return `The answer failed: ${error.message}`;
+}
+
 export function AskPanel({
   threadId: initialThreadId,
   title: initialTitle,
   saved = [],
+  initialPrompt,
 }: {
   threadId?: string;
   title?: string;
   saved?: SavedAskMessage[];
+  // From /ask?q=…: asked once on mount.
+  initialPrompt?: string;
 }) {
   const router = useRouter();
-  const [title, setTitle] = useState(initialTitle ?? "");
+  const [title, setTitle] = useState(initialTitle ?? initialPrompt?.trim().slice(0, 120) ?? "");
   const [input, setInput] = useState("");
 
   const [chat] = useState(() => {
@@ -363,21 +297,20 @@ export function AskPanel({
           return { body: { threadId: session.threadId, prompt: last ? textOf(last) : "" } };
         },
       }),
-      onFinish: async ({ message }) => {
+      onFinish: async ({ message, isError, isAbort, isDisconnect }) => {
         const meta = message.metadata;
-        if (!meta?.threadId) return;
-        const isNew = session.threadId !== meta.threadId;
-        session.threadId = meta.threadId;
+        // A failed answer is not saved, so its thread does not exist.
+        if (!meta?.threadId || isError || isAbort || isDisconnect) return;
         // The saved answer is the validated (possibly repaired) version of the streamed draft.
         const response = await fetch(`/api/ask?threadId=${meta.threadId}`);
-        if (response.ok) {
-          const body = (await response.json()) as { messages: SavedAskMessage[] };
-          const row = body.messages.find((m) => m.id === meta.messageId);
-          if (row) {
-            const fresh = toUiMessage(row, meta.threadId);
-            created.setMessages((all) => all.map((m) => (m.id === message.id ? { ...fresh, id: m.id } : m)));
-          }
-        }
+        if (!response.ok) return;
+        const body = (await response.json()) as { messages: SavedAskMessage[] };
+        const row = body.messages.find((m) => m.id === meta.messageId);
+        if (!row) return;
+        const isNew = session.threadId !== meta.threadId;
+        session.threadId = meta.threadId;
+        const fresh = toUiMessage(row, meta.threadId);
+        created.messages = created.messages.map((m) => (m.id === message.id ? { ...fresh, id: m.id } : m));
         if (isNew) router.replace(`/ask?thread=${meta.threadId}`, { scroll: false });
         router.refresh();
       },
@@ -395,6 +328,16 @@ export function AskPanel({
     setInput("");
     void sendMessage({ text });
   }
+
+  // The ref keeps Strict Mode's second effect run from asking twice; q is then dropped from the URL
+  // so a reload does not ask again.
+  const asked = useRef(false);
+  useEffect(() => {
+    if (asked.current || !initialPrompt?.trim()) return;
+    asked.current = true;
+    void sendMessage({ text: initialPrompt.trim() });
+    router.replace("/ask", { scroll: false });
+  }, [initialPrompt, router, sendMessage]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -421,7 +364,7 @@ export function AskPanel({
           ),
         )}
         {status === "submitted" ? <p className="text-sm text-muted-foreground">Routing the question…</p> : null}
-        {error ? <p role="alert" className="text-sm text-destructive">The answer failed: {error.message}</p> : null}
+        {error ? <p role="alert" className="text-sm text-destructive">{errorMessage(error)}</p> : null}
       </div>
 
       <form

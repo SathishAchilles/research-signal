@@ -1,7 +1,10 @@
+import { sql } from "drizzle-orm";
 import { z } from "zod";
+import { db } from "@/db/client";
 import { env } from "@/lib/env";
+import { saveLeadFigures } from "./hf";
 import { withArxivLease } from "./lease";
-import { type SourceAdapter, TEST_TIMEOUT_MS, httpGet, stripTags, timed } from "./types";
+import { type SourceAdapter, TEST_TIMEOUT_MS, errorMessage, httpGet, stripTags, timed } from "./types";
 
 export const MAX_CHARS = 20_000;
 const LEASE_WAIT_MS = 15_000;
@@ -12,6 +15,66 @@ export type FullTextSource = "arxiv-html" | "unpaywall" | "core";
 export type FullText = { text: string; source: FullTextSource };
 export type FullTextPaper = { arxivId?: string | null; doi?: string | null; title: string };
 export type FullTextOptions = { coreApiKey?: string; unpaywallEmail?: string };
+export type Figure = { url: string; caption: string };
+
+export const MAX_FIGURES = 6;
+const MAX_CAPTION = 160;
+const ICON_CLASS = /\b(?:ds-[\w-]*|icon|logo|glyph)\b/i;
+const FIGURE_TOKEN = /<figure\b[^>]*>|<\/figure\s*>|<img\b[^>]*>|<figcaption\b[^>]*>([\s\S]*?)<\/figcaption\s*>/gi;
+
+function attr(tag: string, name: string): string | null {
+  const match = new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`, "i").exec(tag);
+  const value = match?.[1] ?? match?.[2];
+  return value ? value.replace(/&amp;/g, "&").trim() : null;
+}
+
+function caption(html: string): string {
+  const text = stripTags(html.replace(/<(math|svg|script|style)\b[\s\S]*?<\/\1>/gi, " ")).replace(/\s+([:;,.])/g, "$1");
+  return text.length <= MAX_CAPTION ? text : `${text.slice(0, MAX_CAPTION - 1).trimEnd()}…`;
+}
+
+// Raster images inside <figure> elements, in page order, each with the caption of the next
+// <figcaption> (the enclosing figure's). Site icons, logos, SVGs and data URIs are skipped, URLs
+// are made absolute against `baseUrl` (the page's final URL: arXiv's relative srcs start with
+// "<id>v<n>/"), duplicates are dropped, and at most 6 are returned.
+export function extractFigures(html: string, baseUrl: string): Figure[] {
+  const out: Figure[] = [];
+  const seen = new Set<string>();
+  const pending: Figure[] = [];
+  let depth = 0;
+  for (const match of html.matchAll(FIGURE_TOKEN)) {
+    const token = match[0];
+    if (/^<figure\b/i.test(token)) depth++;
+    else if (/^<\/figure/i.test(token)) {
+      depth = Math.max(0, depth - 1);
+      if (depth === 0) pending.length = 0;
+    } else if (/^<figcaption/i.test(token)) {
+      for (const figure of pending.splice(0)) figure.caption = caption(match[1] ?? "");
+    } else if (depth > 0 && out.length < MAX_FIGURES) {
+      const src = attr(token, "src");
+      if (!src || src.startsWith("data:") || src.includes("/static/") || ICON_CLASS.test(attr(token, "class") ?? "")) continue;
+      let url: URL;
+      try {
+        url = new URL(src, baseUrl);
+      } catch {
+        continue;
+      }
+      if (!/^https?:$/.test(url.protocol) || /\.svg$/i.test(url.pathname) || seen.has(url.href)) continue;
+      seen.add(url.href);
+      const figure = { url: url.href, caption: "" };
+      out.push(figure);
+      pending.push(figure);
+    }
+  }
+  return out;
+}
+
+// Stores the figures (an empty list records the attempt) and offers the first as an arxiv_html lead figure.
+export async function saveFigures(arxivId: string, figures: Figure[]): Promise<void> {
+  await db.execute(sql`
+    update research_signal.papers set figures = ${JSON.stringify(figures)}::jsonb where arxiv_id = ${arxivId}`);
+  if (figures[0]) await saveLeadFigures([{ arxivId, url: figures[0].url, source: "arxiv_html" }]);
+}
 
 // Drops markup that carries no prose (head, scripts, MathML with its TeX annotations,
 // navigation), then strips the remaining tags and keeps the first 20,000 characters.
@@ -23,12 +86,27 @@ export function htmlToText(html: string): string {
   return stripTags(body).slice(0, MAX_CHARS);
 }
 
-async function fetchHtml(url: string, accept = "text/html"): Promise<string | null> {
+type HtmlPage = { html: string; url: string };
+
+async function fetchPage(url: string, accept = "text/html"): Promise<HtmlPage | null> {
   const response = await httpGet(url, { accept }, 30_000);
   if (!response.ok) return null;
   const type = response.headers.get("content-type") ?? "";
   if (!type.includes("html")) return null;
-  return response.text();
+  return { html: await response.text(), url: response.url || url };
+}
+
+async function fetchHtml(url: string, accept = "text/html"): Promise<string | null> {
+  return (await fetchPage(url, accept))?.html ?? null;
+}
+
+const arxivHtmlUrl = (arxivId: string) => `https://arxiv.org/html/${encodeURIComponent(arxivId)}`;
+
+// One arXiv HTML request; the caller holds the arXiv lease and has already waited. Returns the
+// page's figures, or an empty list when arXiv has no HTML version.
+export async function fetchArxivFigures(arxivId: string): Promise<Figure[]> {
+  const page = await fetchPage(arxivHtmlUrl(arxivId));
+  return page ? extractFigures(page.html, page.url) : [];
 }
 
 async function fromArxiv(arxivId: string): Promise<string | null> {
@@ -36,11 +114,17 @@ async function fromArxiv(arxivId: string): Promise<string | null> {
     "fulltext",
     async (wait) => {
       await wait();
-      return fetchHtml(`https://arxiv.org/html/${encodeURIComponent(arxivId)}`);
+      return fetchPage(arxivHtmlUrl(arxivId));
     },
     { maxWaitMs: LEASE_WAIT_MS },
   );
-  return result === "busy" || !result ? null : result;
+  if (result === "busy" || !result) return null;
+  try {
+    await saveFigures(arxivId, extractFigures(result.html, result.url));
+  } catch (error) {
+    console.warn(`figures for ${arxivId} not saved: ${errorMessage(error)}`);
+  }
+  return result.html;
 }
 
 async function fromUnpaywall(doi: string, email: string): Promise<string | null> {

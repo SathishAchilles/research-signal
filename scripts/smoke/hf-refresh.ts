@@ -45,7 +45,8 @@ export default async function run(args: string[]) {
 
     const after = await countSignals();
     console.log(`eligible papers ${eligible.n}, listed on HF ${written}, signals ${before} -> ${after} (+${after - before})`);
-    if (status !== "OK") throw new Error(`hf_refresh finished with status ${status}, expected OK`);
+    // PARTIAL means some HF requests still failed after the 429 retry; those papers wait for the next run.
+    if (status !== "OK" && status !== "PARTIAL") throw new Error(`hf_refresh finished with status ${status}, expected OK or PARTIAL`);
     if (eligible.n > 0 && written <= 0) throw new Error(`no HF snapshots written for ${eligible.n} eligible papers`);
     if (after - before !== written) throw new Error("signals growth does not match the snapshots written");
   } finally {

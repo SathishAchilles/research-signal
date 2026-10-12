@@ -57,7 +57,7 @@ export function systemPrompt(
   routed: RoutedIntent,
   template: string,
   intents: Intent[],
-  options: { wordCap: number; domainNames: string[]; today: string },
+  options: { wordCap: number; domainNames: string[]; today: string; toolRounds: number; confidence: string },
 ): string {
   const values: Record<string, string> = {
     intent: intents.join(" + "),
@@ -67,6 +67,8 @@ export function systemPrompt(
     client: routed.client ?? "(none)",
     today: options.today,
     wordCap: String(options.wordCap),
+    toolRounds: String(options.toolRounds),
+    confidence: options.confidence,
     template,
   };
   return load("prompts/system.md").replace(/\{\{(\w+)\}\}/g, (match, key: string) => values[key] ?? match);

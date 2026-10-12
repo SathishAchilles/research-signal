@@ -15,8 +15,8 @@ import { renderEmail } from "./email";
 import { finalRerank } from "./rerank";
 import { isEmptySelection, selectBrief } from "./select";
 import { fillTokens } from "./tokens";
-import type { BriefDoc, BriefProse, BriefSelection, Evidence } from "./types";
-import { type BriefWindow, briefWindow, dayMonth } from "./window";
+import type { BriefDoc, BriefProse, BriefSelection, Evidence, RerankJudgement } from "./types";
+import { type BriefWindow, briefWindow, dayMonth, nextSendTime, zonedParts } from "./window";
 
 export type WeeklyOutcome = { status: RunStatus; items: number; error?: string };
 
@@ -80,22 +80,33 @@ function searchBody(doc: BriefDoc): string {
   return lines.join("\n");
 }
 
+function storedRerank(json: unknown): RerankJudgement[] | undefined {
+  const rerank = (json as Partial<BriefDoc> | null)?.rerank;
+  // An empty array means no rerank ran (no FINALISTs, or a failed judge); never reuse it.
+  return Array.isArray(rerank) && rerank.length > 0 ? rerank : undefined;
+}
+
 // Selection, optional rerank, prose, tokens and HTML for one window, stored as a READY brief with its
-// brief_items. It never sends and never marks papers SENT.
+// brief_items. It never sends and never marks papers SENT. Rerank judgements already stored for the
+// week are reused (no second LLM call); only `persistRerank` writes them to paper_domain.
 export async function buildBrief(
   window: BriefWindow,
-  options: { rerank?: boolean; overwriteDelivered?: boolean } = {},
+  options: { rerank?: boolean; overwriteDelivered?: boolean; persistRerank?: boolean } = {},
 ): Promise<BuiltBrief> {
-  if (!options.overwriteDelivered) {
-    const [existing] = await db.select().from(briefs).where(eq(briefs.isoWeek, window.isoWeek));
-    if (existing && (existing.status === "SCHEDULED" || existing.status === "SENT")) {
-      throw new Error(`brief ${window.isoWeek} is already ${existing.status}; not rebuilding it`);
-    }
+  const [existing] = await db
+    .select({ status: briefs.status, json: briefs.json })
+    .from(briefs)
+    .where(eq(briefs.isoWeek, window.isoWeek));
+  if (!options.overwriteDelivered && existing && (existing.status === "SCHEDULED" || existing.status === "SENT")) {
+    throw new Error(`brief ${window.isoWeek} is already ${existing.status}; not rebuilding it`);
   }
+  const previousRerank = storedRerank(existing?.json);
   let selection = await selectBrief(window);
+  let rerank = previousRerank;
   if (options.rerank !== false && !isEmptySelection(selection)) {
-    const changes = await finalRerank(selection);
-    if (changes.length > 0) selection = await selectBrief(window);
+    const result = await finalRerank(selection, { persist: options.persistRerank, reuse: previousRerank });
+    rerank = result.judgements.length > 0 ? result.judgements : undefined;
+    if (result.changes.length > 0) selection = await selectBrief(window, result.overrides);
   }
   const briefId = await upsertBriefRow(window);
 
@@ -121,6 +132,7 @@ export async function buildBrief(
     proseSource: composed.source,
     selection,
     prose: fillProse(composed.prose, selection),
+    ...(rerank && rerank.length > 0 ? { rerank } : {}),
   };
   const { html, bytes, compactOnWeb } = renderEmail(doc);
 
@@ -173,55 +185,6 @@ export async function buildBrief(
   };
 }
 
-function zonedParts(at: Date, timeZone: string) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    hourCycle: "h23",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    weekday: "short",
-  }).formatToParts(at);
-  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
-  return {
-    y: Number(get("year")),
-    m: Number(get("month")),
-    d: Number(get("day")),
-    h: Number(get("hour")),
-    min: Number(get("minute")),
-    s: Number(get("second")),
-    weekday: get("weekday"),
-  };
-}
-
-// UTC instant of a wall-clock time in a time zone (two passes settle DST edges).
-function zonedToUtc(y: number, m: number, d: number, h: number, min: number, timeZone: string): Date {
-  let guess = Date.UTC(y, m - 1, d, h, min);
-  for (let i = 0; i < 2; i++) {
-    const p = zonedParts(new Date(guess), timeZone);
-    const offset = Date.UTC(p.y, p.m - 1, p.d, p.h, p.min, p.s) - guess;
-    guess = Date.UTC(y, m - 1, d, h, min) - offset;
-  }
-  return new Date(guess);
-}
-
-// The first Monday at send_local_time in the configured zone that is still in the future.
-export function nextSendTime(now: Date, timeZone: string, localTime: string): Date {
-  const [hh, mm] = localTime.split(":").map(Number);
-  const local = zonedParts(now, timeZone);
-  const dayIndex = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(local.weekday);
-  let ahead = (8 - dayIndex) % 7;
-  for (;;) {
-    const date = new Date(Date.UTC(local.y, local.m - 1, local.d + ahead));
-    const at = zonedToUtc(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate(), hh, mm, timeZone);
-    if (at.getTime() > now.getTime()) return at;
-    ahead += 7;
-  }
-}
-
 async function s2Refresh(window: BriefWindow): Promise<void> {
   const runId = await startRun("s2", "weekly");
   try {
@@ -246,7 +209,8 @@ async function s2Refresh(window: BriefWindow): Promise<void> {
   }
 }
 
-type SendResult = { resendId: string | null; scheduledFor: Date; dryRun: boolean };
+// scheduledFor is null when the window's Monday slot has passed and the brief goes out at once.
+type SendResult = { resendId: string | null; scheduledFor: Date | null; dryRun: boolean };
 
 type Previous = { resendId: string | null; status: string } | undefined;
 
@@ -256,14 +220,15 @@ async function sendBrief(built: BuiltBrief, now: Date, dryRun: boolean, previous
     .from(appSettings)
     .where(eq(appSettings.id, 1));
   if (!settings || settings.recipients.length === 0) throw new Error("no recipients configured in app_settings");
-  const scheduledFor = nextSendTime(now, settings.timezone, settings.sendLocalTime);
-  const sendDay = zonedParts(scheduledFor, settings.timezone);
+  const scheduledFor = nextSendTime(briefWindow(now), now, settings.timezone, settings.sendLocalTime);
+  const sendDay = zonedParts(scheduledFor ?? now, settings.timezone);
   const subject = `research-signal, ${dayMonth(new Date(Date.UTC(sendDay.y, sendDay.m - 1, sendDay.d)))}: ${built.doc?.prose.weekLine ?? ""}`;
 
   if (dryRun) {
     console.log(
       `DRY_RUN: would send brief ${built.isoWeek} to ${settings.recipients.join(", ")} from RESEND_FROM, ` +
-        `subject ${subject.length} chars, html ${built.bytes} bytes, scheduledAt ${scheduledFor.toISOString()}`,
+        `subject ${subject.length} chars, html ${built.bytes} bytes, ` +
+        (scheduledFor ? `scheduledAt ${scheduledFor.toISOString()}` : "scheduledAt omitted (send now)"),
     );
     return { resendId: null, scheduledFor, dryRun: true };
   }
@@ -278,7 +243,7 @@ async function sendBrief(built: BuiltBrief, now: Date, dryRun: boolean, previous
     to: settings.recipients,
     subject,
     html: built.html,
-    scheduledAt: scheduledFor.toISOString(),
+    ...(scheduledFor ? { scheduledAt: scheduledFor.toISOString() } : {}),
   });
   if (error || !data) throw new Error(`Resend send failed: ${error?.message ?? "no id returned"}`);
   return { resendId: data.id, scheduledFor, dryRun: false };
@@ -306,7 +271,7 @@ export async function runWeekly(
     .select({ resendId: briefs.resendId, status: briefs.status })
     .from(briefs)
     .where(eq(briefs.isoWeek, window.isoWeek));
-  const built = await buildBrief(window, { rerank: options.rerank, overwriteDelivered: true });
+  const built = await buildBrief(window, { rerank: options.rerank, overwriteDelivered: true, persistRerank: !dryRun });
   if (built.empty) {
     return { status: "FAILED", items: 0, error: `empty brief for ${window.isoWeek}; not sent`, briefId: built.briefId, isoWeek: window.isoWeek, dryRun };
   }
@@ -320,7 +285,11 @@ export async function runWeekly(
     await db.transaction(async (tx) => {
       await tx
         .update(briefs)
-        .set({ status: "SCHEDULED", resendId: sent.resendId, scheduledFor: sent.scheduledFor })
+        .set(
+          sent.scheduledFor
+            ? { status: "SCHEDULED", resendId: sent.resendId, scheduledFor: sent.scheduledFor, sentAt: null }
+            : { status: "SENT", resendId: sent.resendId, scheduledFor: null, sentAt: now },
+        )
         .where(eq(briefs.id, built.briefId));
       await tx
         .update(papers)
@@ -328,7 +297,7 @@ export async function runWeekly(
         .where(and(inArray(papers.id, paperIds), inArray(papers.status, ["SCORED", "FINALIST"])));
     });
   }
-  notes.push(`prose ${built.proseSource}`, `${built.bytes} bytes`, sent.dryRun ? "dry run: not sent" : `scheduled ${sent.scheduledFor.toISOString()}`);
+  notes.push(`prose ${built.proseSource}`, `${built.bytes} bytes`, sent.dryRun ? "dry run: not sent" : sent.scheduledFor ? `scheduled ${sent.scheduledFor.toISOString()}` : "sent at once");
   return { status: "OK", items: built.cards, error: notes.join("; "), briefId: built.briefId, isoWeek: window.isoWeek, dryRun };
 }
 

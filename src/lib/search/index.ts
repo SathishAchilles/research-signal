@@ -130,3 +130,68 @@ export async function deleteSearchDoc(type: EntityType, entityId: string): Promi
     .delete(searchDocs)
     .where(and(eq(searchDocs.entityType, type), eq(searchDocs.entityId, entityId)));
 }
+
+const SUMMARY_LIMIT = 300;
+
+type SummaryRow = {
+  paper_id: string;
+  title: string;
+  signal_type: string;
+  client_angle: string | null;
+  domain_ids: number[];
+  source: string;
+  published_at: string | Date | null;
+};
+
+export function summaryBody(signalType: string, clientAngle: string | null): string {
+  const angle = clientAngle?.trim();
+  return [`Signal: ${signalType}`, angle ? `Client angle: ${angle}` : null].filter(Boolean).join("\n");
+}
+
+/**
+ * Upserts one 'summary' doc per scored paper: its signal type and client angle, from the paper's best
+ * domain row. It covers the given papers plus, up to SUMMARY_LIMIT, scored papers whose summary is missing
+ * or not yet embedded, so a failed run is healed by the next one. Rung, attention, verdict and has_code
+ * are filled by the search_docs triggers from 007_search_verdict.sql.
+ */
+export async function indexPaperSummaries(paperIds: string[] = []): Promise<UpsertResult[]> {
+  const ids = `{${paperIds.join(",")}}`;
+  const rows = await db.execute<SummaryRow>(sql`
+    with targets as (
+      select unnest(${ids}::uuid[]) as paper_id
+      union
+      (select pd.paper_id
+       from research_signal.paper_domain pd
+       left join research_signal.search_docs d
+         on d.entity_type = 'summary' and d.entity_id = pd.paper_id::text
+       where pd.scored_at is not null and pd.signal_type is not null
+         and (d.id is null or d.embedding is null)
+       limit ${SUMMARY_LIMIT})
+    )
+    select p.id as paper_id, p.title, s.signal_type, s.client_angle, s.domain_ids, p.source,
+      coalesce(p.announced_at, p.submitted_at) as published_at
+    from targets t
+    join research_signal.papers p on p.id = t.paper_id
+    join lateral (
+      select
+        (array_agg(pd.signal_type order by pd.final_score desc nulls last, pd.cosine desc nulls last))[1]::text as signal_type,
+        (array_agg(pd.client_angle order by pd.final_score desc nulls last, pd.cosine desc nulls last))[1] as client_angle,
+        array_agg(pd.domain_id order by pd.domain_id) as domain_ids
+      from research_signal.paper_domain pd
+      where pd.paper_id = p.id and pd.scored_at is not null and pd.signal_type is not null
+    ) s on s.signal_type is not null`);
+  return upsertSearchDocs(
+    rows.map((r) => ({
+      entityType: "summary" as const,
+      entityId: r.paper_id,
+      paperId: r.paper_id,
+      title: r.title,
+      body: summaryBody(r.signal_type, r.client_angle),
+      facets: {
+        domainIds: r.domain_ids.map(Number),
+        source: r.source,
+        publishedAt: r.published_at === null ? null : new Date(r.published_at),
+      },
+    })),
+  );
+}

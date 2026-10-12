@@ -6,6 +6,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { db } from "@/db/client";
 import { actionKind, domains, rung, verdict } from "@/db/schema";
+import { LlmCreditsExhausted } from "@/lib/llm/call";
 import { cn } from "@/lib/utils";
 import {
   MAX_SEARCH_LIMIT,
@@ -71,6 +72,7 @@ function toFilters(p: Params): SearchFilters {
     until: p.until || undefined,
     source: p.source || undefined,
     minRung: p.rung || undefined,
+    verdict: p.verdict || undefined,
     action: p.client ? "CLIENT" : p.action || undefined,
     hasCode: p.code === "yes" ? true : p.code === "no" ? false : undefined,
   };
@@ -201,22 +203,38 @@ async function facetOptions() {
 
 async function Results({ params }: { params: Params }) {
   const filters = toFilters(params);
-  const postFilter = Boolean(params.verdict || params.client);
-  const hits = await search({
-    q: params.q,
-    filters,
-    sort: params.sort,
-    limit: postFilter ? MAX_SEARCH_LIMIT : PAGE_SIZE,
-  });
+  // The client tag is not a search_docs facet, and one paper can match as several docs (paper, summary,
+  // note), so over-fetch and filter or collapse here.
+  let hits: SearchHit[];
+  try {
+    hits = await search({ q: params.q, filters, sort: params.sort, limit: MAX_SEARCH_LIMIT });
+  } catch (error) {
+    if (!(error instanceof LlmCreditsExhausted)) throw error;
+    return (
+      <p role="alert" className="py-6 text-sm text-destructive">
+        Search is unavailable: the LLM credits are exhausted, so the query cannot be embedded. Clear the query
+        to browse with filters.
+      </p>
+    );
+  }
   const paperIds = [...new Set(hits.flatMap((h) => (h.paperId ? [h.paperId] : [])))];
   const details = await paperDetails(paperIds, filters.domainId);
 
   const tag = params.client.toLowerCase();
+  const seen = new Set<string>();
   const views = hits
+    .filter((hit) => {
+      if (!hit.paperId) return true;
+      if (seen.has(hit.paperId)) return false;
+      seen.add(hit.paperId);
+      return true;
+    })
     .map((hit) => {
       const detail = hit.paperId ? details.get(hit.paperId) : undefined;
       return { view: toView(hit, detail), card: toCard(hit, detail), action: detail?.my_action ?? null };
     })
+    // search_docs.verdict is the paper's best verdict across domains; with a domain filter the row shows that
+    // domain's verdict, so keep only rows whose shown verdict matches.
     .filter(({ view }) => !params.verdict || view.verdict === params.verdict)
     .filter(({ view }) => !tag || (view.myAction === "CLIENT" && view.clientTag?.toLowerCase() === tag))
     .slice(0, PAGE_SIZE);

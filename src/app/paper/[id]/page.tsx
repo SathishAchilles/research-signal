@@ -3,14 +3,31 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { PaperFigure } from "@/components/paper/PaperFigure";
 import { Badge } from "@/components/ui/badge";
 import { db } from "@/db/client";
 import { actions, domains, paperDomain, papers, signals } from "@/db/schema";
 import type { Rung } from "@/lib/pipeline/rank";
 import { PaperActions } from "./PaperActions";
 
+// The existence check runs before anything streams, so an unknown id is a real 404.
+export const instant = false;
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const RELATED_K = 8;
+const GALLERY_WIDTH = 240;
+
+// next/image serves only the hosts in next.config.ts images.remotePatterns; anything else is skipped.
+function servable(url: string): boolean {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "https:") return false;
+    if (u.hostname === "arxiv.org") return u.pathname.startsWith("/html/");
+    return u.hostname === "cdn-uploads.huggingface.co" || u.hostname === "cdn-thumbnails.huggingface.co";
+  } catch {
+    return false;
+  }
+}
 
 type BuildsOn = { paperId: string | null; title: string; citationCount: number | null }[];
 
@@ -72,13 +89,15 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-async function PaperView({ params }: { params: Promise<{ id: string }> }) {
-  await connection();
-  const { id } = await params;
-  if (!UUID.test(id)) notFound();
-  const data = await load(id.toLowerCase());
+async function PaperView({ id }: { id: string }) {
+  const data = await load(id);
   if (!data) notFound();
   const { paper, domainRows, signalRows, evidence, relatedRows, buildsOn, lastAction } = data;
+  const figures = (paper.figures ?? []).filter((f) => servable(f.url));
+  const lead = paper.figureUrl && servable(paper.figureUrl) ? paper.figureUrl : null;
+  const leadCaption = lead ? (figures.find((f) => f.url === lead)?.caption ?? null) : null;
+  const gallery = figures.filter((f) => f.url !== lead);
+  const signalType = domainRows.find((d) => d.signalType !== null)?.signalType ?? null;
 
   return (
     <article className="flex flex-col gap-8">
@@ -105,6 +124,37 @@ async function PaperView({ params }: { params: Promise<{ id: string }> }) {
         </div>
         <PaperActions paperId={paper.id} current={lastAction} />
       </header>
+
+      <PaperFigure
+        paperId={paper.id}
+        arxivId={paper.arxivId}
+        figureUrl={lead}
+        caption={leadCaption}
+        authors={paper.authors}
+        signalType={signalType}
+        width={640}
+        height={360}
+      />
+
+      {gallery.length ? (
+        <Section title="Figures">
+          <div className="flex flex-wrap gap-4">
+            {gallery.map((f) => (
+              <PaperFigure
+                key={f.url}
+                paperId={paper.id}
+                arxivId={paper.arxivId}
+                figureUrl={f.url}
+                caption={f.caption}
+                authors={paper.authors}
+                signalType={signalType}
+                width={GALLERY_WIDTH}
+                height={160}
+              />
+            ))}
+          </div>
+        </Section>
+      ) : null}
 
       {paper.abstract ? (
         <Section title="Abstract">
@@ -217,11 +267,17 @@ async function PaperView({ params }: { params: Promise<{ id: string }> }) {
   );
 }
 
-export default function PaperPage({ params }: PageProps<"/paper/[id]">) {
+export default async function PaperPage({ params }: PageProps<"/paper/[id]">) {
+  await connection();
+  const { id: raw } = await params;
+  if (!UUID.test(raw)) notFound();
+  const id = raw.toLowerCase();
+  const [exists] = await db.select({ id: papers.id }).from(papers).where(eq(papers.id, id));
+  if (!exists) notFound();
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 px-4 py-8">
       <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
-        <PaperView params={params} />
+        <PaperView id={id} />
       </Suspense>
     </main>
   );

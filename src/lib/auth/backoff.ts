@@ -13,11 +13,14 @@ export async function isLocked(ip: string): Promise<boolean> {
   return rows.length > 0;
 }
 
-// One atomic upsert: the fifth failure locks the address for 15 min * 2^lockouts (max 24 h)
-// and starts a new count. The exponent is clamped so the interval cannot overflow.
-export async function recordFailure(ip: string): Promise<void> {
+// Reserves one guess for this key before the PIN is verified, in one atomic upsert. The row lock taken by
+// ON CONFLICT serializes a parallel burst, so at most MAX_FAILURES reservations succeed per lockout window.
+// The reservation that reaches the limit locks the key for 15 min * 2^lockouts (max 24 h) and starts a new
+// count; the exponent is clamped so the interval cannot overflow. A locked key matches no row (the WHERE
+// on DO UPDATE fails), so nothing is returned and the guess is refused. A correct PIN clears the row.
+export async function reserveAttempt(ip: string): Promise<boolean> {
   const reachesLimit = sql`${authAttempts.failures} + 1 >= ${MAX_FAILURES}`;
-  await db
+  const rows = await db
     .insert(authAttempts)
     .values({ ip, failures: 1 })
     .onConflictDoUpdate({
@@ -30,7 +33,19 @@ export async function recordFailure(ip: string): Promise<void> {
           else ${authAttempts.lockedUntil} end`,
         updatedAt: sql`now()`,
       },
-    });
+      setWhere: sql`${authAttempts.lockedUntil} is null or ${authAttempts.lockedUntil} <= now()`,
+    })
+    .returning({ ip: authAttempts.ip });
+  return rows.length > 0;
+}
+
+// Runs one PIN check under the per-key budget: the guess is reserved first, so it counts even if the
+// request dies mid-verify, and only a successful check clears the count.
+export async function guardedCheck(ip: string, check: () => Promise<boolean>): Promise<"ok" | "wrong" | "locked"> {
+  if (!(await reserveAttempt(ip))) return "locked";
+  if (!(await check())) return "wrong";
+  await clearAttempts(ip);
+  return "ok";
 }
 
 export async function clearAttempts(ip: string): Promise<void> {
