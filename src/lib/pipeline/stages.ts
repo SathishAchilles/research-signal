@@ -197,7 +197,13 @@ export const FIGURES_PER_RUN = 30;
 // one arXiv lease at 3.1 s spacing, and stores their figures. A paper with no HTML version gets an
 // empty list, which records the attempt; a network error leaves it for the next run. A full batch
 // queues another run. Throws when the lease stays busy or every fetch failed, so the job is retried.
+// A 429 from arXiv pauses 30 s and retries that paper once per run; a second 429 stops the run and
+// skips the full-batch re-queue. If nothing was saved the run throws, so the queue retries it after
+// its 5-minute backoff; otherwise the unfetched papers (still `figures` NULL) wait for a later run.
+// fetchArxivFigures surfaces only the status in its error, so no Retry-After value reaches this loop.
 export async function runFigures(limit = FIGURES_PER_RUN): Promise<StageOutcome> {
+  const RATE_LIMIT_PAUSE_MS = 30_000;
+  const isRateLimited = (error: unknown) => /^HTTP 429\b/.test(errorMessage(error));
   const runId = await startRun("arxiv", "figures");
   try {
     const rows = await db.execute<{ arxiv_id: string }>(sql`
@@ -209,23 +215,38 @@ export async function runFigures(limit = FIGURES_PER_RUN): Promise<StageOutcome>
       "figures",
       async (wait) => {
         let saved = 0;
+        let retried = false;
+        let rateLimited = false;
         const errors: string[] = [];
-        for (const { arxiv_id: arxivId } of rows) {
-          await wait();
-          try {
-            await saveFigures(arxivId, await fetchArxivFigures(arxivId));
-            saved++;
-          } catch (error) {
-            errors.push(`${arxivId}: ${errorMessage(error)}`);
+        for (const [index, { arxiv_id: arxivId }] of rows.entries()) {
+          while (true) {
+            await wait();
+            try {
+              await saveFigures(arxivId, await fetchArxivFigures(arxivId));
+              saved++;
+            } catch (error) {
+              if (isRateLimited(error) && !retried) {
+                retried = true;
+                await new Promise<void>((resolve) => setTimeout(resolve, RATE_LIMIT_PAUSE_MS));
+                continue;
+              }
+              errors.push(`${arxivId}: ${errorMessage(error)}`);
+              if (isRateLimited(error)) rateLimited = true;
+            }
+            break;
+          }
+          if (rateLimited) {
+            errors.push(`arXiv rate limited; stopped with ${rows.length - index - 1} papers left for the next run`);
+            break;
           }
         }
-        return { saved, errors };
+        return { saved, errors, rateLimited };
       },
       { maxWaitMs: LEASE_WAIT_MS },
     );
     if (result === "busy") throw new Error("arXiv lease busy");
     if (result.saved === 0 && result.errors.length > 0) throw new Error(result.errors.join("; "));
-    if (rows.length === limit) await enqueue("figures");
+    if (rows.length === limit && !result.rateLimited) await enqueue("figures");
     const outcome: StageOutcome =
       result.errors.length === 0
         ? { status: "OK", items: result.saved }
@@ -244,11 +265,55 @@ export async function heartbeat(): Promise<StageOutcome> {
   return { ...outcome, error: ["scheduler stale", outcome.error].filter(Boolean).join("; ") };
 }
 
-const notImplemented = async (): Promise<StageOutcome> => ({
-  status: "SKIPPED",
-  items: 0,
-  error: "stage not implemented yet",
-});
+export const RETENTION_PAPER_WEEKS = 12;
+export const RETENTION_SIGNAL_WEEKS = 26;
+
+// D16 retention, in one transaction:
+// - DROPPED and PREFILTERED (never shortlisted) papers go, with their search_docs rows, once both the
+//   paper and our copy of it are older than 12 weeks. The created_at guard keeps an old paper that was
+//   ingested recently (an HF listing, say), which would otherwise be deleted and re-ingested. NEW papers
+//   are still in the queue and stay. A paper in a brief or with a user action is kept, because briefs
+//   and actions are history. Cascades remove its paper_domain and signals rows.
+// - signals snapshots older than 26 weeks go, except the latest one per paper.
+// The counts go into this stage's source_runs row: items is the total, error carries the breakdown.
+export async function retention(): Promise<StageOutcome> {
+  const counts = await db.transaction(async (tx) => {
+    const [docs] = await tx.execute<{ papers: number; search_docs: number }>(sql`
+      with doomed as (
+        select p.id from research_signal.papers p
+        where p.status in ('DROPPED', 'PREFILTERED')
+          and p.created_at < now() - make_interval(weeks => ${RETENTION_PAPER_WEEKS})
+          and coalesce(p.announced_at, p.submitted_at, p.created_at) < now() - make_interval(weeks => ${RETENTION_PAPER_WEEKS})
+          and not exists (select 1 from research_signal.brief_items b where b.paper_id = p.id)
+          and not exists (select 1 from research_signal.actions a where a.paper_id = p.id)
+      ),
+      gone_docs as (
+        delete from research_signal.search_docs d using doomed where d.paper_id = doomed.id returning 1
+      ),
+      gone_papers as (
+        delete from research_signal.papers p using doomed where p.id = doomed.id returning 1
+      )
+      select (select count(*) from gone_papers)::int as papers, (select count(*) from gone_docs)::int as search_docs`);
+    const [signalRows] = await tx.execute<{ signals: number }>(sql`
+      with gone as (
+        delete from research_signal.signals s
+        where s.captured_at < now() - make_interval(weeks => ${RETENTION_SIGNAL_WEEKS})
+          and exists (
+            select 1 from research_signal.signals newer
+            where newer.paper_id = s.paper_id
+              and (newer.captured_at > s.captured_at or (newer.captured_at = s.captured_at and newer.id > s.id))
+          )
+        returning 1
+      )
+      select count(*)::int as signals from gone`);
+    return { papers: docs.papers, searchDocs: docs.search_docs, signals: signalRows.signals };
+  });
+  return {
+    status: "OK",
+    items: counts.papers + counts.searchDocs + counts.signals,
+    error: `deleted papers=${counts.papers} search_docs=${counts.searchDocs} signals=${counts.signals}`,
+  };
+}
 
 export const stageHandlers: Record<StageName, () => Promise<StageOutcome>> = {
   ingest,
@@ -256,7 +321,7 @@ export const stageHandlers: Record<StageName, () => Promise<StageOutcome>> = {
   hf_refresh: hfRefresh,
   weekly: () => weeklyStage(),
   weekly_retry: () => weeklyRetryStage(),
-  retention: notImplemented,
+  retention,
   heartbeat,
 };
 

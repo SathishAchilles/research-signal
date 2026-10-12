@@ -38,26 +38,35 @@ At 10 domains: week line and Top 3 about 45 s, domain intros about 100 s, 10 HER
 
 `rs_weekly` (Sun 12:00 UTC) POSTs `/api/stage/weekly`, which runs `runWeekly()`:
 
+0. `deliveryCheck` (`src/lib/brief/weekly.ts`) runs first, before any source refresh or build. Without `force` the run does nothing and returns SKIPPED, with the reason in `source_runs.error` and the server log (`weekly: skipped; ...`), when this week's brief is already SCHEDULED or SENT, or when the week's Monday send slot has already passed (see "Send time" below).
 1. Venue adapters (ACL, CVF, PMLR), a best-effort keyless Semantic Scholar refresh of the window's FINALISTs, and `recomputeCentroids()`.
-2. `selectBrief`, then `finalRerank` (full text for the top 15 FINALISTs, one re-judging call, `final` recomputed), then selection again. The judgements are stored in the brief's `json.rerank`, keyed by paper and domain. A later run for the same ISO week reuses them and makes no second re-judging call, so repeated runs are idempotent. Only a real (not dry) `runWeekly` writes the re-judged signal type, novelty, client angle, `final` and verdict to `paper_domain`. `npm run smoke -- rerank`, the backfill preview and `DRY_RUN=1` runs apply them in memory only.
+2. `selectBrief`, then `finalRerank` (full text for the top 15 FINALISTs, one re-judging call, `final` recomputed), then selection again. The judgements are stored in the brief's `json.rerank`, keyed by paper and domain, each with the `judgedAt` time of the re-judging call (kept unchanged when the judgements are reused or carried into a preview). A later run for the same ISO week reuses them and makes no second re-judging call, so repeated runs are idempotent, unless one of the selection's papers has a `paper_domain.scored_at` at or after the oldest `judgedAt` (it was rescored since), or a judgement has no `judgedAt` (stored before this rule); then it re-judges. Only a real (not dry) `runWeekly` writes the re-judged signal type, novelty, client angle, `final` and verdict to `paper_domain`. `npm run smoke -- rerank`, the backfill preview and `DRY_RUN=1` runs apply them in memory only.
 3. `composeBrief`, `fillTokens`, `renderEmail`; the brief row (`json`, `html`, `html_bytes`, window) and its `brief_items` are upserted, and the brief is indexed in `search_docs`.
 4. `resend.emails.send` with `scheduledAt` = the brief week's send slot: the Monday after the window at `send_local_time` in `timezone` (07:00 IST = 01:30 UTC; for `2026-W41` that is Mon 12 Oct 2026 01:30 UTC). An earlier scheduled email for the same week is cancelled first. The brief becomes SCHEDULED and its papers SENT.
 5. If no paper qualifies, the brief is marked FAILED, nothing is sent, and a `source_runs` row with `source_kind = 'brief'` records the alert.
 
-**Send time for manual runs.** The slot belongs to the brief's window, not to the run time (`nextSendTime` in `src/lib/brief/window.ts`). A run on Sunday, or on Monday before 07:00 IST, schedules this Monday 07:00 IST. A run on Monday after 07:00 IST, or Tuesday to Friday, builds the same week's brief and sends it at once: `scheduledAt` is omitted, the brief becomes SENT with `sent_at` set and `scheduled_for` empty. It does not wait for the following Monday. From Saturday 00:00 UTC the next week is complete, and a run schedules the following Monday.
+**Send time.** The slot belongs to the brief's window, not to the run time (`sendSlot` and `nextSendTime` in `src/lib/brief/window.ts`). A run on Sunday, or on Monday before 07:00 IST, schedules this Monday 07:00 IST. From Monday 07:00 IST until Friday the slot of the current window has passed, so a run without `force` does nothing: it does not send the closing week's brief late, mid-week, as if it were a new week's brief, and it does not touch the stored brief. With `force` it builds the same week's brief and sends it at once: `scheduledAt` is omitted, the brief becomes SENT with `sent_at` set and `scheduled_for` empty. From Saturday 00:00 UTC the next week is complete, and a run schedules the following Monday.
 
 `rs_weekly_retry` (Sun 16:00 UTC) POSTs `/api/stage/weekly_retry`, which does nothing when this week's brief is SCHEDULED or SENT and otherwise runs the same steps.
 
-`DRY_RUN=1` in the server environment skips the Resend call and logs the recipients, subject length, HTML size and `scheduledAt` (or "scheduledAt omitted (send now)") instead; the brief stays READY, no paper is marked SENT and no rerank score is written to `paper_domain`.
+`DRY_RUN=1` in the server environment skips the Resend call and logs the recipients, subject length, HTML size and `scheduledAt` (or "scheduledAt omitted (send now)") instead; the brief stays READY, no paper is marked SENT and no rerank score is written to `paper_domain`. The `deliveryCheck` guard applies to dry runs too, so a dry run for a delivered week, or after the slot, is a no-op. Do not combine `DRY_RUN=1` with `force` for a SCHEDULED or SENT week: the dry run still rebuilds and overwrites that week's stored `json` and `html` (the status is restored).
 
-## Re-sending a brief manually
+## Running and re-sending a brief manually
 
 ```sh
 curl -s -o /dev/null -w "%{http_code}\n" -X POST \
   -H "x-cron-secret: $CRON_SECRET" "$APP_URL/api/stage/weekly"
 ```
 
-It returns `202` at once and rebuilds and re-schedules this week's brief in the background (cancelling the earlier scheduled email). After Monday 07:00 IST it sends at once instead, as described above. Against a local dev server use `APP_URL=http://localhost:3000`. Watch the outcome in `research_signal.source_runs` (stage `weekly`) and `research_signal.briefs`.
+It returns `202` at once and runs `runWeekly()` in the background, without `force`. On Sunday, or Monday before 07:00 IST, for a week that is not yet SCHEDULED or SENT (for example after a failed Sunday run), it builds and schedules the brief for Monday 07:00 IST. For a week that is already SCHEDULED or SENT, or after the Monday slot, it does nothing; the `source_runs` row for stage `weekly` is SKIPPED with the reason. Against a local dev server use `APP_URL=http://localhost:3000`. Watch the outcome in `research_signal.source_runs` (stage `weekly`) and `research_signal.briefs`.
+
+A re-send needs the explicit `force` flag, which the HTTP route does not take. Run it from the repository with the production environment in `.env.local`:
+
+```sh
+npx tsx --env-file=.env.local -e 'import("./src/lib/brief/weekly.ts").then(async ({ runWeekly }) => { console.log(await runWeekly({ force: true })); process.exit(0); })'
+```
+
+Before the Monday slot it rebuilds the brief, cancels the earlier scheduled email and schedules the new one. After the slot it rebuilds the current window's brief and sends it at once, so recipients get a second copy of a SENT week. The rerank judgements stored for the week are reused, as above.
 
 ## Preview without sending
 

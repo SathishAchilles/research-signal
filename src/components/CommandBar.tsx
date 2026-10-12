@@ -70,17 +70,21 @@ export function CommandBar() {
         const params = new URLSearchParams({ q: text, limit: String(HIT_LIMIT) });
         const response = await fetch(`/api/search?${params}`, { signal: controller.signal });
         const body = (await response.json().catch(() => ({}))) as { hits?: Hit[]; error?: string };
+        if (controller.signal.aborted) return;
         if (!response.ok) {
+          console.error("command bar search failed", response.status);
           setError(body.error === "llm_credits_exhausted" ? "LLM credits exhausted; search needs them." : "Search failed.");
-          throw new Error(`search failed with HTTP ${response.status}`);
+          setHits([]);
+          return;
         }
         setError(null);
         setHits(body.hits ?? []);
       } catch (failure) {
-        if (!controller.signal.aborted) {
-          console.error("command bar search failed", failure instanceof Error ? failure.message : String(failure));
-          setHits([]);
-        }
+        // A rejected fetch (network down, CORS, DNS) lands here; an abort is not a failure.
+        if (controller.signal.aborted) return;
+        console.error("command bar search failed", failure instanceof Error ? failure.message : String(failure));
+        setError("Search failed.");
+        setHits([]);
       } finally {
         if (!controller.signal.aborted) setLoading(false);
       }
@@ -88,6 +92,9 @@ export function CommandBar() {
     return () => {
       controller.abort();
       clearTimeout(timer);
+      // The query changed, emptied or the bar closed: the old request's error and spinner are stale.
+      setError(null);
+      setLoading(false);
     };
   }, [open, mode, text]);
 
@@ -135,6 +142,9 @@ export function CommandBar() {
                 type="button"
                 role="tab"
                 aria-selected={mode === m}
+                // Out of the tab order: Tab already switches mode, and the dialog's initial focus
+                // goes to its first tabbable element, which must be the input.
+                tabIndex={-1}
                 onClick={() => setMode(m)}
                 className={cn(
                   "rounded-full px-3 py-0.5 capitalize text-muted-foreground transition-colors hover:text-foreground",
