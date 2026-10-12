@@ -19,7 +19,7 @@ export const COLORS_UI = {
   verdict: { CLIENT: "#FF8A50", READ: "#56B4E9", SKIP: "#A7AEB8" },
 } as const;
 
-export const VERDICT_LABEL = { CLIENT: "BRING TO CLIENT", READ: "READ", SKIP: "SKIP" } as const;
+export const VERDICT_LABEL = { CLIENT: "SHARE WITH CLIENTS", READ: "READ", SKIP: "SKIP" } as const;
 export const RUNG_LEVEL = { LAB: 1, CODE: 2, MODEL: 3, PEER: 4 } as const;
 export const SIGNAL_BORDER = { BENCH: "solid", EVAL: "dashed", REFRAME: "dotted", METHOD: "double" } as const;
 export const meterText = (rung: BriefCard["rung"]) =>

@@ -10,7 +10,7 @@ export type ActionOrigin = "email" | "web" | "ask";
 export const isActionKind = (value: unknown): value is ActionKind =>
   typeof value === "string" && (ACTION_KINDS as readonly string[]).includes(value);
 
-export const ACTION_LABEL: Record<ActionKind, string> = { READ: "Read", CLIENT: "Bring to client", SKIP: "Skip" };
+export const ACTION_LABEL: Record<ActionKind, string> = { READ: "Read", CLIENT: "Share with clients", SKIP: "Skip" };
 
 type Latest = { id: number; action: ActionKind; note: string | null; client_tag: string | null };
 
@@ -70,7 +70,7 @@ export async function recordAction(input: {
 export async function updateActionNote(paperId: string, note: string, clientTag: string): Promise<{ ok: boolean; error?: string }> {
   const latest = await latestAction(paperId);
   if (!latest) return { ok: false, error: "This paper has no action yet." };
-  if (latest.action === "SKIP") return { ok: false, error: "Notes and client tags are for Read or Bring to client papers." };
+  if (latest.action === "SKIP") return { ok: false, error: "Notes and client tags are for Read or Share with clients papers." };
   const cleanNote = note.trim().slice(0, 4000) || null;
   const cleanTag = clientTag.trim().slice(0, 80) || null;
   await db.execute(sql`

@@ -7,7 +7,7 @@ import { useCardKeys } from "./useCardKeys";
 const KEYS: [string, string][] = [
   ["j / k", "Next / previous card"],
   ["r", "Mark Read"],
-  ["c", "Bring to client"],
+  ["c", "Share with clients"],
   ["s", "Skip"],
   ["Enter", "Show abstract"],
   ["/", "Ask"],

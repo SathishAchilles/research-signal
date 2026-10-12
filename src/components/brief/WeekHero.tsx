@@ -42,7 +42,7 @@ export function WeekHero({ doc, status }: { doc: BriefDoc; status: string }) {
         </div>
         <div className="grid grid-cols-2 gap-3">
           <StatTile label="Featured" value={String(cards.length)} />
-          <StatTile label="Bring to client" value={String(cards.filter((c) => c.verdict === "CLIENT").length)} />
+          <StatTile label="Share with clients" value={String(cards.filter((c) => c.verdict === "CLIENT").length)} />
           <StatTile label="Hero" value={String(selection.domains.filter((d) => d.hero).length)} />
           <StatTile label={topRising == null ? "No risers" : "Top rising"} value={topRising == null ? "—" : `UP ${formatPercent(topRising)}`} />
         </div>

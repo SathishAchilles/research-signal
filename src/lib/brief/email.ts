@@ -6,7 +6,7 @@ import type { ActionKind, BriefCard, BriefDoc, DomainSelection } from "./types";
 
 export const EMAIL_BYTE_LIMIT = 90_000;
 
-const ACTION_LABEL: Record<ActionKind, string> = { READ: "Read", CLIENT: "Bring to client", SKIP: "Skip" };
+const ACTION_LABEL: Record<ActionKind, string> = { READ: "Read", CLIENT: "Share with clients", SKIP: "Skip" };
 
 const FONT = "font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;";
 

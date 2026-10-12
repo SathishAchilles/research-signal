@@ -4,7 +4,7 @@ flowchart TB
   C --> D["Weekdays (automatic)<br/>ingest -> match -> score -> enrich"]
   D --> E["Monday 07:00 IST brief (~8.5 min)<br/>week line + Top 3 -> per domain S-C-I, HERO, 2 STANDARD, <=5 COMPACT<br/>rising lane, quiet domains, source health, coverage window"]
   E --> F["Read -> reading queue"]
-  E --> G["Bring to client -> notable log<br/>+ note, client tag -> domain profile learns"]
+  E --> G["Share with clients -> notable log<br/>+ note, client tag -> domain profile learns"]
   E --> H["Skip"]
   G --> L["Log: filter by client / domain / week -> CSV for the deck"]
   E --> M["Consulting moments (any day)"]

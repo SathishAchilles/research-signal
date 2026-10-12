@@ -20,7 +20,7 @@ The brief is built every Sunday from the papers announced Monday to Friday of th
 
 Each paper appears once, in the domain where its `final` is highest. Papers already in an earlier SCHEDULED or SENT brief are left out unless they are rising. The thresholds are the `hero`, `standard` and `compact` keys of `app_settings.thresholds`; the caps (1, 2, 5, rising 6) are constants in `src/lib/brief/select.ts`.
 
-Every card shows the verdict as a color bar and a text label (`BRING TO CLIENT` `#D55E00`, `READ` `#0072B2`, `SKIP` `#8A8F98`), the evidence rung as `[##--] CODE` text, the signal type as a bordered chip (BENCH solid, EVAL dashed, REFRAME dotted, METHOD double), attention counts, and links to the abstract, PDF, code and Hugging Face when known. No cue relies on color or images alone.
+Every card shows the verdict as a color bar and a text label (`SHARE WITH CLIENTS` `#D55E00`, `READ` `#0072B2`, `SKIP` `#8A8F98`), the evidence rung as `[##--] CODE` text, the signal type as a bordered chip (BENCH solid, EVAL dashed, REFRAME dotted, METHOD double), attention counts, and links to the abstract, PDF, code and Hugging Face when known. No cue relies on color or images alone.
 
 ## Prose rules
 
@@ -32,7 +32,7 @@ At 10 domains: week line and Top 3 about 45 s, domain intros about 100 s, 10 HER
 
 ## Email
 
-`renderEmail` (`src/lib/brief/email.ts`) builds 600 px nested tables with inline styles and no images or scripts. Each card carries signed Read / Bring to client / Skip links to `/a/<token>` (HMAC-SHA256 with `ACTION_LINK_SECRET`, valid 30 days). Opening a link renders a page that records the action from script, so link scanners record nothing; a `<noscript>` button covers mail clients without script. If the HTML is over 90,000 bytes, compact rows are replaced by "N more on the web" links to `/brief/<isoWeek>#d<domainId>`; for unusually large weeks the rising lane and then standard cards follow.
+`renderEmail` (`src/lib/brief/email.ts`) builds 600 px nested tables with inline styles and no images or scripts. Each card carries signed Read / Share with clients / Skip links to `/a/<token>` (HMAC-SHA256 with `ACTION_LINK_SECRET`, valid 30 days). Opening a link renders a page that records the action from script, so link scanners record nothing; a `<noscript>` button covers mail clients without script. If the HTML is over 90,000 bytes, compact rows are replaced by "N more on the web" links to `/brief/<isoWeek>#d<domainId>`; for unusually large weeks the rising lane and then standard cards follow.
 
 ## Sunday run
 

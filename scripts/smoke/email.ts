@@ -93,7 +93,7 @@ export default async function run(args: string[]) {
     console.log(`${latest ? `brief ${doc.selection.isoWeek} from the database` : "fixture brief"}: wrote ${file}`);
     console.log(`bytes ${out.bytes} (limit ${EMAIL_BYTE_LIMIT}), moved to the web: ${out.webOnly.join(", ") || "nothing"}`);
     if (out.bytes >= EMAIL_BYTE_LIMIT) throw new Error("email is over the byte limit");
-    for (const cue of ["BRING TO CLIENT", "READ", "SKIP", "[#---] LAB", "[####] PEER", "BENCH", "EVAL", "REFRAME", "METHOD"]) {
+    for (const cue of ["SHARE WITH CLIENTS", "READ", "SKIP", "[#---] LAB", "[####] PEER", "BENCH", "EVAL", "REFRAME", "METHOD"]) {
       if (!latest && !out.html.includes(cue)) throw new Error(`text cue missing: ${cue}`);
     }
     if (/<img|<script/i.test(out.html)) throw new Error("email contains images or scripts");

@@ -5,7 +5,7 @@ import type { Rung, SignalType, Verdict } from "@/lib/pipeline/rank";
 // Pure and type-only on its imports so it runs on the server and in the client bundle alike.
 export type SpeechSegment = { id: string; label: string; text: string };
 
-const VERDICT_SPOKEN: Record<Verdict, string> = { CLIENT: "Bring to client", READ: "Worth a read", SKIP: "Skim only" };
+const VERDICT_SPOKEN: Record<Verdict, string> = { CLIENT: "Share with clients", READ: "Worth a read", SKIP: "Skim only" };
 const RUNG_SPOKEN: Record<Rung, string> = {
   LAB: "lab result only",
   CODE: "code released",

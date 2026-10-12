@@ -1,7 +1,7 @@
 import type { SignalType } from "@/lib/pipeline/rank";
 import type { BriefCard, BriefProse, BriefSelection, DomainSelection } from "./types";
 
-const VERDICT_TEXT = { CLIENT: "Bring to client", READ: "Worth a read", SKIP: "Skim only" } as const;
+const VERDICT_TEXT = { CLIENT: "Share with clients", READ: "Worth a read", SKIP: "Skim only" } as const;
 
 function firstSentence(text: string): string {
   const match = text.match(/^[\s\S]*?[.!?](?=\s|$)/);

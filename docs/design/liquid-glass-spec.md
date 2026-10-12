@@ -481,7 +481,7 @@ Card anatomy is task T2a. It covers the following files.
 - **`CardParts.tsx` › `MoreDetails`**: keep `<details data-expand>`. The summary becomes `micro`.
 - **`VerdictBar.tsx`**: `COLORS` → `COLORS_UI` in both components.
   - The bar keeps `aria-hidden`. Change `w-1 rounded-l-md` to `w-1 rounded-l-[inherit]` and add `forced-colors:[forced-color-adjust:none] forced-colors:!bg-[CanvasText]`.
-  - The label stays text (`BRING TO CLIENT` / `READ` / `SKIP`) in `font-mono text-[11px] tracking-[.08em]`.
+  - The label stays text (`SHARE WITH CLIENTS` / `READ` / `SKIP`) in `font-mono text-[11px] tracking-[.08em]`.
 - **`SignalChip.tsx`**
   - The inline border keeps `SIGNAL_BORDER[signal]`. Width is `METHOD ? 3px : 2px`, because `double` needs at least 3px to show two lines. Colour stays `currentColor`.
   - Classes: `rounded-full px-2 bg-[rgb(127_224_230/.08)] text-foreground font-mono`.
@@ -588,7 +588,7 @@ Props, state, fetch calls, the mini-Markdown parser and the keyboard handling st
 │ WEEK 41 SIGNAL   (display 56px; "SIGNAL" in --signal-2)                                       │
 │ h1: prose.weekLine (font-heading 24px, max-w-[40ch])                                          │
 │ ┌ plate tiles 2×2 ─────────┐ ┌ SignalHelix (on the shell, no plate) ──────────────────────┐ │
-│ │ 38        │ 3            │ │ PEER ┆ ·:·.:·  ●──[#1 BRING TO CLIENT · Agents          ]   │ │
+│ │ 38        │ 3            │ │ PEER ┆ ·:·.:·  ●──[#1 SHARE WITH CLIENTS · Agents          ]   │ │
 │ │ FEATURED  │ BRING TO     │ │      ┆ :·  ·:     [ Long-horizon tool use…  [###-] MODEL ]   │ │
 │ │           │ CLIENT       │ │MODEL ┆  ·:·:·                                               │ │
 │ │ 6         │ UP +38%      │ │ CODE ┆ ·:  :·  ●──[#2 READ · Evals · [##--] CODE · EVAL]    │ │
@@ -619,7 +619,7 @@ How each hero value is computed, using only existing `BriefDoc` fields (§10):
 | Tile | Computation |
 |---|---|
 | FEATURED | `Object.keys(selection.cards).length` |
-| BRING TO CLIENT | count of cards with `verdict==="CLIENT"` |
+| SHARE WITH CLIENTS | count of cards with `verdict==="CLIENT"` |
 | HERO | `selection.domains.filter(d=>d.hero).length` |
 | TOP RISING | `max(cards[id].evidence.rising_pct for id in selection.rising)`, formatted with `formatPercent`, shown as "UP +x%". When `rising` is empty, show "—" with the label "NO RISERS". |
 | Cone chart | for each domain, the sum of `evidence.hf_upvotes ?? 0` over `[hero, ...standard, ...compact]` cards, plus a "Rising" cone. Titled "ATTENTION THIS WEEK · HF UPVOTES". |

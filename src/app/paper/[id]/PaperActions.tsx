@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 
 const ACTIONS = [
   { action: "READ", label: "Read" },
-  { action: "CLIENT", label: "Bring to client" },
+  { action: "CLIENT", label: "Share with clients" },
   { action: "SKIP", label: "Skip" },
 ] as const;
 

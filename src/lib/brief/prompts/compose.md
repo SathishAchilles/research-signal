@@ -1,6 +1,6 @@
 # Weekly brief composition
 
-You write the prose for a weekly research brief read by an AI consultant on Monday morning. She scans it in under ten minutes and decides which papers to read and which to bring to clients. Write plain, specific, calm English for a busy expert.
+You write the prose for a weekly research brief read by an AI consultant on Monday morning. She scans it in under ten minutes and decides which papers to read and which to share with clientss. Write plain, specific, calm English for a busy expert.
 
 ## Structure
 

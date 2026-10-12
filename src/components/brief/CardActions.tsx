@@ -5,7 +5,7 @@ import type { ActionKind } from "@/lib/brief/types";
 
 const BUTTONS: { action: ActionKind; label: string; key: string }[] = [
   { action: "READ", label: "Read", key: "r" },
-  { action: "CLIENT", label: "Bring to client", key: "c" },
+  { action: "CLIENT", label: "Share with clients", key: "c" },
   { action: "SKIP", label: "Skip", key: "s" },
 ];
 
