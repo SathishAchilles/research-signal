@@ -5,7 +5,7 @@ import { db } from "@/db/client";
 import { papers } from "@/db/schema";
 import { withArxivLease } from "./lease";
 import { normalizeTitle } from "./openreview";
-import { type SourceAdapter, TEST_TIMEOUT_MS, httpGet, timed } from "./types";
+import { type SourceAdapter, TEST_TIMEOUT_MS, errorMessage, httpGet, timed } from "./types";
 
 export const DEFAULT_CATEGORIES = ["cs.AI", "cs.CL", "cs.LG", "cs.CV", "cs.IR", "cs.SE"];
 const RSS_URL = "https://rss.arxiv.org/rss/";
@@ -162,29 +162,45 @@ export async function fetchBackstopPage(
   return parseAtom(await response.text());
 }
 
+// `incomplete` says why pages are missing when a later page failed or stayed empty.
+export type BackstopItems = ArxivItem[] & { incomplete?: string };
+
 // Pages through every result in the window; each page goes through wait(), so pages stay 3.1 s apart.
 // arXiv sometimes answers a page with no entries, so an empty page is retried once before stopping.
+// A failing first page throws; a later failure returns the pages already fetched with `incomplete` set.
 export async function fetchBackstop(
   categories: string[],
   fromDate: Date,
   toDate: Date,
   wait?: () => Promise<void>,
-): Promise<ArxivItem[]> {
+): Promise<BackstopItems> {
   const items: ArxivItem[] = [];
   let total = Infinity;
+  let incomplete: string | undefined;
   for (let start = 0; start < Math.min(total, API_RESULT_CAP); start += PAGE_SIZE) {
-    let page = await fetchBackstopPage(categories, fromDate, toDate, start, wait);
-    if (page.items.length === 0 && (start > 0 || page.totalResults > 0)) {
+    let page: { items: ArxivItem[]; totalResults: number };
+    try {
       page = await fetchBackstopPage(categories, fromDate, toDate, start, wait);
+      if (page.items.length === 0 && (start > 0 || page.totalResults > 0)) {
+        page = await fetchBackstopPage(categories, fromDate, toDate, start, wait);
+      }
+    } catch (error) {
+      if (start === 0) throw error;
+      incomplete = `page at ${start} failed (${errorMessage(error)}); fetched ${items.length} of ${total}`;
+      break;
     }
     if (start === 0) total = page.totalResults;
     items.push(...page.items);
-    if (page.items.length === 0) break;
+    if (page.items.length === 0) {
+      if (items.length < Math.min(total, API_RESULT_CAP)) {
+        incomplete = `page at ${start} was empty twice; fetched ${items.length} of ${total}`;
+      }
+      break;
+    }
   }
-  if (items.length < Math.min(total, API_RESULT_CAP) || total > API_RESULT_CAP) {
-    console.warn(`arXiv backstop incomplete: ${total} results, fetched ${items.length}`);
-  }
-  return items;
+  if (incomplete) console.warn(`arXiv backstop incomplete: ${incomplete}`);
+  else if (total > API_RESULT_CAP) console.warn(`arXiv backstop capped: ${total} results, fetched ${items.length}`);
+  return Object.assign(items, { incomplete });
 }
 
 function dedupe(items: ArxivItem[]): ArxivItem[] {

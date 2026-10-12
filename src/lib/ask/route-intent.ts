@@ -49,7 +49,8 @@ function isIsoDate(value: string | null): value is string {
   return value !== null && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value));
 }
 
-export async function routeIntent(prompt: string, now = new Date()): Promise<RoutedIntent> {
+// requestId tags the llm_calls row ("ask_route#<uuid>") so the Ask route can sum its own cost.
+export async function routeIntent(prompt: string, now = new Date(), requestId?: string): Promise<RoutedIntent> {
   const [settings] = await db.select({ chatModel: appSettings.chatModel }).from(appSettings).where(eq(appSettings.id, 1));
   if (!settings) throw new Error("app_settings row is missing; run npm run seed");
   const active = await db
@@ -58,7 +59,7 @@ export async function routeIntent(prompt: string, now = new Date()): Promise<Rou
     .where(eq(domains.active, true))
     .orderBy(asc(domains.id));
 
-  const { object } = await llmCall("ask_route", settings.chatModel, () =>
+  const { object } = await llmCall(requestId ? `ask_route#${requestId}` : "ask_route", settings.chatModel, () =>
     generateObject({
       model: chatModel(settings.chatModel),
       schema: RouteSchema,

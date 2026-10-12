@@ -4,7 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { refresh } from "next/cache";
 import { db } from "@/db/client";
 import { appSettings } from "@/db/schema";
-import { closestGoogleId } from "@/lib/llm/models-check";
+import { closestGoogleId, fetchIds } from "@/lib/llm/models-check";
 import { errorMessage } from "@/lib/sources/types";
 import { hasSession, SESSION_EXPIRED } from "../_lib/guard";
 import { modelFormatError } from "../_lib/validation";
@@ -15,13 +15,6 @@ const MODEL_LISTS = {
   chat: "https://openrouter.ai/api/v1/models",
   embed: "https://openrouter.ai/api/v1/embeddings/models",
 } as const;
-
-async function listIds(url: string): Promise<string[]> {
-  const response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
-  if (!response.ok) throw new Error(`OpenRouter model list returned HTTP ${response.status}`);
-  const body = (await response.json()) as { data?: { id?: unknown }[] };
-  return (body.data ?? []).map((m) => m.id).filter((id): id is string => typeof id === "string");
-}
 
 function unavailable(id: string, available: string[]): string {
   const suggestion = closestGoogleId(id, available);
@@ -38,7 +31,7 @@ export async function saveModels(input: { chatModel: string; embedModel: string 
   let chatIds: string[];
   let embedIds: string[];
   try {
-    [chatIds, embedIds] = await Promise.all([listIds(MODEL_LISTS.chat), listIds(MODEL_LISTS.embed)]);
+    [chatIds, embedIds] = await Promise.all([fetchIds(MODEL_LISTS.chat), fetchIds(MODEL_LISTS.embed)]);
   } catch (error) {
     return { ok: false, error: `Could not check models: ${errorMessage(error)}` };
   }

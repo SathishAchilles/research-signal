@@ -20,7 +20,7 @@ export type SourceView = {
   values: ParamValues;
   takesKey: boolean;
   keySet: boolean;
-  health: "OK" | "PARTIAL" | "FAILED" | "STALE";
+  health: "OK" | "PARTIAL" | "FAILED" | "SKIPPED" | "STALE";
   lastRunAt: string | null;
   lastError: string | null;
   lastItemCount: number | null;
@@ -30,6 +30,7 @@ const HEALTH_VARIANT = {
   OK: "default",
   PARTIAL: "secondary",
   FAILED: "destructive",
+  SKIPPED: "outline",
   STALE: "outline",
 } as const;
 

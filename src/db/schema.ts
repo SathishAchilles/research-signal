@@ -80,7 +80,7 @@ export const briefTier = rs.enum("brief_tier", ["TOP3", "HERO", "STANDARD", "COM
 export const actionKind = rs.enum("action_kind", ["READ", "CLIENT", "SKIP"]);
 export const actionOrigin = rs.enum("action_origin", ["email", "web", "ask"]);
 export const entityType = rs.enum("entity_type", ["paper", "summary", "note", "brief", "answer"]);
-export const jobStage = rs.enum("job_stage", ["embed1", "embed2", "score", "enrich", "hf_refresh", "weekly"]);
+export const jobStage = rs.enum("job_stage", ["embed1", "embed2", "score", "enrich", "figures", "hf_refresh", "weekly"]);
 export const jobStatus = rs.enum("job_status", ["PENDING", "RUNNING", "DONE", "FAILED"]);
 export const runStatus = rs.enum("run_status", ["OK", "PARTIAL", "FAILED", "SKIPPED"]);
 
@@ -153,6 +153,9 @@ export const papers = rs.table("papers", {
   ),
   titleNorm: text("title_norm").notNull(),
   createdAt: timestamptz("created_at").notNull().defaultNow(),
+  figureUrl: text("figure_url"),
+  figureSource: text("figure_source").$type<"hf_media" | "arxiv_html" | "hf_thumb">(),
+  figures: jsonb("figures").$type<{ url: string; caption: string }[]>(),
 });
 
 export const paperDomain = rs.table(

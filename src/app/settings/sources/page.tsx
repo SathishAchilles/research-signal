@@ -11,7 +11,9 @@ const STALE_AFTER_MS = 36 * 60 * 60 * 1000;
 
 function health(lastRunAt: Date | null, lastStatus: string | null): SourceView["health"] {
   if (!lastRunAt || Date.now() - lastRunAt.getTime() > STALE_AFTER_MS) return "STALE";
-  return lastStatus === "OK" || lastStatus === "PARTIAL" || lastStatus === "FAILED" ? lastStatus : "STALE";
+  return lastStatus === "OK" || lastStatus === "PARTIAL" || lastStatus === "FAILED" || lastStatus === "SKIPPED"
+    ? lastStatus
+    : "STALE";
 }
 
 async function hasVaultKey(name: string): Promise<boolean> {

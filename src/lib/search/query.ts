@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db/client";
-import { actionKind, rung } from "@/db/schema";
+import { actionKind, rung, verdict } from "@/db/schema";
 import { embedTexts } from "@/lib/llm/embed";
 import type { EntityType } from "./index";
 
@@ -12,6 +12,7 @@ export const searchFiltersSchema = z
     until: z.iso.datetime({ offset: true }).or(z.iso.date()),
     source: z.string().min(1),
     minRung: z.enum(rung.enumValues),
+    verdict: z.enum(verdict.enumValues),
     action: z.enum(actionKind.enumValues),
     hasCode: z.boolean(),
   })
@@ -31,6 +32,8 @@ export type SearchHit = {
   publishedAt: string | null;
   attention: number | null;
   score: number;
+  // Cosine similarity of the hit to the query; null for full-text-only hits and empty queries.
+  similarity: number | null;
 };
 
 type HitRow = {
@@ -42,6 +45,7 @@ type HitRow = {
   published_at: string | Date | null;
   attention: string | number | null;
   score: string | number;
+  similarity?: string | number | null;
 };
 
 const STAGE = "search_query";
@@ -79,6 +83,7 @@ export async function search({
     publishedAt: toIso(r.published_at),
     attention: r.attention === null ? null : Number(r.attention),
     score: Number(r.score),
+    similarity: r.similarity === null || r.similarity === undefined ? null : Number(r.similarity),
   }));
 
   if (text && sort === "date") hits.sort((a, b) => time(b.publishedAt) - time(a.publishedAt));

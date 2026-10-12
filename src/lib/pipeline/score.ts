@@ -8,6 +8,7 @@ import { db } from "@/db/client";
 import { appSettings, domains, paperDomain, papers, signalType } from "@/db/schema";
 import { LlmCreditsExhausted, llmCall } from "@/lib/llm/call";
 import { chatModel } from "@/lib/llm/openrouter";
+import { indexPaperSummaries } from "@/lib/search/index";
 import { enqueue } from "./jobs";
 import { rankAll } from "./rank";
 
@@ -210,6 +211,7 @@ export async function runScore(options: { paperIds?: string[]; limit?: number } 
 
   const touched = [...new Set(pending.flatMap((p) => p.domainIds))];
   const { ranked, promoted } = scored > 0 ? await rankAll(touched) : { ranked: 0, promoted: 0 };
+  if (scored > 0) await indexPaperSummaries(pending.map((p) => p.id));
 
   const credits = errors.find((e) => e instanceof LlmCreditsExhausted);
   if (credits) throw credits;

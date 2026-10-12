@@ -74,8 +74,17 @@ export function validateProse(prose: BriefProse, selection: BriefSelection, tota
       }
     }
   };
+  // Each ref is `<cardId>.<field>` naming a card in this selection and a known evidence field.
   const refs = (where: string, list: string[]) => {
     if (list.length === 0) errors.push(`${where}: evidenceRefs is empty`);
+    for (const ref of list) {
+      const match = /^([A-Za-z0-9_-]+)\.([a-z0-9_]+)$/.exec(ref.trim());
+      if (!match) errors.push(`${where}: evidenceRef "${ref}" is not <cardId>.<field>`);
+      else if (!selection.cards[match[1]]) errors.push(`${where}: evidenceRef names unknown card ${match[1]}`);
+      else if (!(EVIDENCE_FIELDS as readonly string[]).includes(match[2])) {
+        errors.push(`${where}: evidenceRef names unknown field ${match[2]}`);
+      }
+    }
   };
 
   cap("weekLine", prose.weekLine, WORD_CAPS.weekLine);

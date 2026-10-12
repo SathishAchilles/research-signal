@@ -7,8 +7,9 @@ export default async function run(args: string[]) {
   try {
     const window = briefWindow(args[0] ? new Date(args[0]) : new Date());
     const selection = await selectBrief(window);
-    const changes = await finalRerank(selection);
-    console.log(`${window.isoWeek}: re-judged ${changes.length} FINALIST papers`);
+    // Never persisted: the smoke prints the re-judged scores without touching paper_domain.
+    const { changes } = await finalRerank(selection, { persist: false });
+    console.log(`${window.isoWeek}: re-judged ${changes.length} FINALIST papers (not persisted)`);
     for (const c of changes) {
       console.log(
         `  ${c.cardId} ${c.before.toFixed(3)} -> ${c.after.toFixed(3)}  ${c.signalType.join("->")} novelty ${c.novelty.join("->")}` +

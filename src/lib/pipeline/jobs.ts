@@ -72,10 +72,34 @@ const noOtherPending = sql`not exists (
   select 1 from research_signal.jobs other
   where other.stage = ${jobs.stage} and other.status = 'PENDING' and other.id <> ${jobs.id})`;
 
+const PENDING_INDEX = "jobs_one_pending_per_stage_idx";
+
+type PgError = { code?: unknown; constraint_name?: unknown; cause?: unknown };
+const pgFields = (e: unknown): PgError => (typeof e === "object" && e !== null ? (e as PgError) : {});
+
+// drizzle wraps the driver error, so the Postgres fields sit on `cause`.
+function isPendingSlotTaken(error: unknown): boolean {
+  const outer = pgFields(error);
+  const pg = outer.code ? outer : pgFields(outer.cause);
+  return pg.code === "23505" && pg.constraint_name === PENDING_INDEX;
+}
+
+// noOtherPending cannot see a PENDING row that another transaction has not committed yet, so two
+// concurrent re-queues of one stage can both pick PENDING; the second then hits the unique index.
+// Running the update again sees the committed row and routes the job to FAILED (superseded).
+async function retryOnPendingConflict<T>(update: () => Promise<T>): Promise<T> {
+  try {
+    return await update();
+  } catch (error) {
+    if (!isPendingSlotTaken(error)) throw error;
+    return update();
+  }
+}
+
 export async function fail(id: number, err: unknown): Promise<"PENDING" | "FAILED"> {
   const message = (err instanceof Error ? err.message : String(err)).slice(0, 1000);
   const retry = sql`${jobs.attempts} < ${MAX_ATTEMPTS} and ${noOtherPending}`;
-  const [row] = await db
+  const [row] = await retryOnPendingConflict(() => db
     .update(jobs)
     .set({
       status: sql`case when ${retry} then 'PENDING' else 'FAILED' end::research_signal.job_status`,
@@ -84,7 +108,7 @@ export async function fail(id: number, err: unknown): Promise<"PENDING" | "FAILE
       payload: sql`${jobs.payload} || jsonb_build_object('lastError', ${message}::text)`,
     })
     .where(eq(jobs.id, id))
-    .returning({ status: jobs.status });
+    .returning({ status: jobs.status }));
   return row?.status === "PENDING" ? "PENDING" : "FAILED";
 }
 
@@ -95,7 +119,7 @@ export async function requeueExpired(): Promise<number> {
     select distinct on (stage) id from research_signal.jobs
     where status = 'RUNNING' and locked_until <= now()
     order by stage, id)`;
-  const rows = await db
+  const rows = await retryOnPendingConflict(() => db
     .update(jobs)
     .set({
       status: sql`case when ${jobs.attempts} < ${MAX_ATTEMPTS} and ${noOtherPending} and ${firstExpired}
@@ -103,7 +127,7 @@ export async function requeueExpired(): Promise<number> {
       lockedUntil: null,
     })
     .where(and(eq(jobs.status, "RUNNING"), lte(jobs.lockedUntil, sql`now()`)))
-    .returning({ id: jobs.id });
+    .returning({ id: jobs.id }));
   return rows.length;
 }
 

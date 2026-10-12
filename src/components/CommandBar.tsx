@@ -34,6 +34,7 @@ export function CommandBar() {
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<Hit[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const hidden = HIDDEN_ON.test(pathname);
 
   useEffect(() => {
@@ -60,11 +61,16 @@ export function CommandBar() {
       try {
         const params = new URLSearchParams({ q: text, limit: String(HIT_LIMIT) });
         const response = await fetch(`/api/search?${params}`, { signal: controller.signal });
-        if (!response.ok) throw new Error(`search failed with HTTP ${response.status}`);
-        setHits(((await response.json()) as { hits: Hit[] }).hits);
-      } catch (error) {
+        const body = (await response.json().catch(() => ({}))) as { hits?: Hit[]; error?: string };
+        if (!response.ok) {
+          setError(body.error === "llm_credits_exhausted" ? "LLM credits exhausted; search needs them." : "Search failed.");
+          throw new Error(`search failed with HTTP ${response.status}`);
+        }
+        setError(null);
+        setHits(body.hits ?? []);
+      } catch (failure) {
         if (!controller.signal.aborted) {
-          console.error("command bar search failed", error instanceof Error ? error.message : String(error));
+          console.error("command bar search failed", failure instanceof Error ? failure.message : String(failure));
           setHits([]);
         }
       } finally {
@@ -91,7 +97,11 @@ export function CommandBar() {
 
   const searchHref = `/search?${new URLSearchParams({ q: text })}`;
   const askHref = `/ask?${new URLSearchParams({ q: text })}`;
-  const visibleHits = mode === "search" && text !== "" ? hits : [];
+  // A paper can match as several docs (paper, summary, note); show it once.
+  const visibleHits =
+    mode === "search" && text !== ""
+      ? hits.filter((hit, i) => !hit.paperId || hits.findIndex((h) => h.paperId === hit.paperId) === i)
+      : [];
 
   return (
     <>
@@ -152,6 +162,11 @@ export function CommandBar() {
                     <CommandShortcut>{loading ? "…" : "↵"}</CommandShortcut>
                   </CommandItem>
                 </CommandGroup>
+                {error && (
+                  <p role="alert" className="px-3 py-2 text-xs text-destructive">
+                    {error}
+                  </p>
+                )}
                 {visibleHits.length > 0 && (
                   <CommandGroup heading="Top hits">
                     {visibleHits.map((hit) => (

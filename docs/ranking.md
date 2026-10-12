@@ -16,7 +16,7 @@ A missing or non-numeric key falls back to the default shown below. New values a
 1. `embed1` keeps the top 40 papers per domain and announcement day with cosine ≥ `prefilter_floor`. They become PREFILTERED and the rest become DROPPED.
 2. `embed2` stores the full embedding and recomputes cosine. The paper becomes SHORTLISTED.
 3. `score` (LLM) rates relevance, novelty, signal type, client angle and risk flags. The paper becomes SCORED, then `rankAll` runs.
-4. `rankAll` computes `final_score` and `verdict` in code. The top 10 per domain and announcement day become FINALIST, and `enrich` is queued.
+4. `rankAll` computes `final_score` and `verdict` in code. It keeps at most 10 FINALIST papers per domain over the last 28 days, promoting and demoting as needed (see [Finalists](#finalists)), and queues `enrich` when it promotes any.
 5. `enrich` takes HF detail, then OpenReview, then Semantic Scholar, then runs `rankAll` again.
 
 ## LLM scoring (`score`)
@@ -97,13 +97,22 @@ A paper is rising when its latest HF upvotes are at least 30% and at least 10 vo
 ## Finalists
 
 - `rankAll` re-ranks every scored row (SCORED, FINALIST or SENT) announced in the last 28 days.
-- It promotes the top 10 per domain and announcement day from SCORED to FINALIST.
-- FINALIST is never demoted, so enrichment already done is kept. SENT papers are re-scored but not promoted.
+- It then selects at most 10 finalists per domain (`FINALISTS_PER_DOMAIN` in `rank.ts`) across that whole 28-day window, not per announcement day. `selectFinalists()` does this greedily:
+  - Rows are taken in order of `final`, best first.
+  - A paper is selected only while every domain it belongs to has fewer than 10 selected papers. It then counts once against each of those domains, so a paper in two domains uses a slot in both.
+  - SENT papers are never selected and never take a slot.
+- SCORED papers that are selected become FINALIST.
+- FINALISTs that are no longer selected are demoted to SCORED, for example when better papers arrive or enrichment lowers their `final`. Their `signals` snapshots stay, so enrichment already done is not lost, and they are promoted again if they climb back.
+- The cap is checked over every domain in the window, even when `rankAll(domainIds)` re-ranked only some domains.
 - When at least one paper is promoted, an `enrich` job is queued.
 
 ## Enrichment (`enrich`)
 
-Each source writes its own `source_runs` row (stage `enrich`). If a source throws `SourceUnavailable`, its run is marked PARTIAL and the next source still runs.
+Each source writes its own `source_runs` row (stage `enrich`). If a source throws `SourceUnavailable`, its run is marked PARTIAL and the next source still runs. A run is also PARTIAL when only part of the work failed:
+
+- HF: some detail requests failed even after the 429 retry. FAILED only when every request failed.
+- OpenReview: a lookup became unavailable part-way. Matches found before it are written. Any other error makes the run FAILED, with the matches written before it counted in `items`.
+- Semantic Scholar: a later batch chunk failed. The chunks before it are written.
 
 - **HF detail**: up to 150 shortlisted-or-better papers from the last 14 days that have no detail snapshot (one with `linked_models`) from today, finalists first.
 - **OpenReview**: FINALISTs from the last 14 days with no stored decision, best `final` first.
@@ -118,5 +127,7 @@ Snapshots merge with the paper's latest one, so a partial write never hides earl
 
 - Fetches HF detail for papers with status SHORTLISTED, SCORED, FINALIST or SENT that were announced in the last 10 days.
 - Writes one new `signals` snapshot per paper that HF lists. Papers HF does not list (404) get none.
+- Requests run 5 at a time. A 429 pauses every request for its `Retry-After`, and the paper is retried once.
+- The run is PARTIAL when some requests still failed (those papers get no snapshot this time) and FAILED only when all of them did. The snapshots that succeeded are always written.
 - These snapshots feed attention and rising.
 - Trigger it with `POST /api/stage/hf_refresh` (header `x-cron-secret`), or queue it as a job.

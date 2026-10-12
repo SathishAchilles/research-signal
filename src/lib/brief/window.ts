@@ -43,3 +43,54 @@ export function windowForIsoWeek(isoWeek: string): BriefWindow | null {
   const window = briefWindow(new Date(monday.getTime() + 5 * DAY_MS));
   return window.isoWeek === isoWeek ? window : null;
 }
+
+export function zonedParts(at: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    weekday: "short",
+  }).formatToParts(at);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return {
+    y: Number(get("year")),
+    m: Number(get("month")),
+    d: Number(get("day")),
+    h: Number(get("hour")),
+    min: Number(get("minute")),
+    s: Number(get("second")),
+    weekday: get("weekday"),
+  };
+}
+
+// UTC instant of a wall-clock time in a time zone (two passes settle DST edges).
+function zonedToUtc(y: number, m: number, d: number, h: number, min: number, timeZone: string): Date {
+  let guess = Date.UTC(y, m - 1, d, h, min);
+  for (let i = 0; i < 2; i++) {
+    const p = zonedParts(new Date(guess), timeZone);
+    const offset = Date.UTC(p.y, p.m - 1, p.d, p.h, p.min, p.s) - guess;
+    guess = Date.UTC(y, m - 1, d, h, min) - offset;
+  }
+  return new Date(guess);
+}
+
+// The window's send slot: the first Monday after `window.end`, at `localTime` in `timeZone`.
+export function sendSlot(window: BriefWindow, timeZone: string, localTime: string): Date {
+  const [hh, mm] = localTime.split(":").map(Number);
+  const local = zonedParts(window.end, timeZone);
+  const ahead = (8 - WEEKDAYS.indexOf(local.weekday)) % 7 || 7;
+  const monday = new Date(Date.UTC(local.y, local.m - 1, local.d + ahead));
+  return zonedToUtc(monday.getUTCFullYear(), monday.getUTCMonth() + 1, monday.getUTCDate(), hh, mm, timeZone);
+}
+
+// scheduledAt for the window's brief: its Monday slot while that is still in the future, otherwise
+// null, meaning send at once (a manual run after Monday 07:00 does not wait a week).
+export function nextSendTime(window: BriefWindow, now: Date, timeZone: string, localTime: string): Date | null {
+  const slot = sendSlot(window, timeZone, localTime);
+  return slot.getTime() > now.getTime() ? slot : null;
+}

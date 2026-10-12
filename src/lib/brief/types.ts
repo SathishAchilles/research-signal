@@ -91,6 +91,20 @@ export const BriefProse = z.object({
 });
 export type BriefProse = z.infer<typeof BriefProse>;
 
+// One re-judged paper from finalRerank, keyed by paper and domain (card ids change between selections).
+export type RerankJudgement = {
+  paperId: string;
+  domainId: number;
+  signalType: SignalType;
+  novelty: number;
+  clientAngle: string;
+};
+
+// What selectBrief overlays on a paper_domain row, keyed by overrideKey(paperId, domainId).
+export type RerankOverride = Pick<BriefCard, "signalType" | "novelty" | "clientAngle" | "final" | "verdict">;
+export type RerankOverrides = Map<string, RerankOverride>;
+export const overrideKey = (paperId: string, domainId: number) => `${paperId}:${domainId}`;
+
 // What briefs.json stores and both the email and the web page render. Prose has tokens filled.
 export type BriefDoc = {
   version: 1;
@@ -99,6 +113,8 @@ export type BriefDoc = {
   proseSource: "llm" | "repaired" | "fallback";
   selection: BriefSelection;
   prose: BriefProse;
+  // The week's rerank judgements, reused by a later runWeekly for the same iso week.
+  rerank?: RerankJudgement[];
 };
 
 export const domainSlug = (domainId: number) => `d${domainId}`;

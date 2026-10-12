@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { askTools, createAskContext } from "@/lib/ask/tools";
+import { askTools, createAskContext, RELEVANT_COSINE } from "@/lib/ask/tools";
 
 type Executable = { execute?: (input: never, options: never) => unknown };
 
@@ -35,9 +35,23 @@ export default async function run(args: string[]) {
     await call(tools, "my_log", {});
     await call(tools, "get_fulltext", { paperId: "p1" });
 
-    // A narrow query keeps strongHits under the live threshold so the gate opens.
-    // A narrow query in an unrelated domain; the gate opens on fewer than 5 hits with cosine >= 0.35.
-    // strongHits keeps the best count of the question, so it is reset to this search's count first.
+    // The live gate: an off-topic query must open it and an on-topic one must not. strongHits keeps
+    // the best count of the question, so it is reset before each search.
+    for (const [q, open] of [
+      ["medieval cheese fermentation", true],
+      ["retrieval-augmented generation", false],
+    ] as const) {
+      ctx.strongHits = null;
+      const out = (await call(tools, "search_index", { q, filters: {} })) as {
+        hits: { cosine: number | null }[];
+        liveSearchAllowed: boolean;
+      };
+      const top = out.hits.map((h) => h.cosine ?? 0).sort((a, b) => b - a).slice(0, 5);
+      console.log(`live gate "${q}": open=${out.liveSearchAllowed} top5 cosine=${top.join(",")} threshold=${RELEVANT_COSINE}`);
+      if (out.liveSearchAllowed !== open) throw new Error(`live gate for "${q}" should be ${open ? "open" : "closed"}`);
+    }
+
+    // A narrow query in an unrelated domain; the gate opens on fewer than 5 hits at or above RELEVANT_COSINE.
     ctx.strongHits = null;
     const narrow = await call(tools, "search_index", { q: liveQuery, filters: { domainId: 4 } });
     console.log(`strongHits for the live query: ${String(narrow.strongHits)}`);

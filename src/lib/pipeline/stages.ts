@@ -4,6 +4,7 @@ import { sources } from "@/db/schema";
 import { weeklyRetryStage, weeklyStage } from "@/lib/brief/weekly";
 import { LlmCreditsExhausted } from "@/lib/llm/call";
 import { type ArxivItem, DEFAULT_CATEGORIES, fetchBackstop, fetchRssDelta, upsertArxivItems } from "@/lib/sources/arxiv";
+import { fetchArxivFigures, saveFigures } from "@/lib/sources/fulltext";
 import { fetchDaily, fetchDetail, writeHfSignals } from "@/lib/sources/hf";
 import { withArxivLease } from "@/lib/sources/lease";
 import { getEnabledSources, getSourceSecret } from "@/lib/sources/registry";
@@ -19,6 +20,8 @@ export type StageName = (typeof STAGE_NAMES)[number];
 export type StageOutcome = { status: RunStatus; items: number; error?: string };
 
 export const DRAIN_BUDGET_MS = 240_000;
+// A job can run for minutes, so drain claims a new one only while this much of the budget is left.
+export const DRAIN_MIN_REMAINING_MS = 90_000;
 const LEASE_WAIT_MS = 60_000;
 const DAY_MS = 86_400_000;
 
@@ -34,7 +37,11 @@ export const jobRunners: Partial<Record<JobStage, JobRunner>> = {
     runEmbed1(Array.isArray(payload.paperIds) ? payload.paperIds.map(String) : undefined),
   embed2: () => runEmbed2(),
   score: () => runScore(),
-  enrich: () => runEnrich(),
+  enrich: async () => {
+    await runEnrich();
+    await enqueue("figures");
+  },
+  figures: () => runFigures(),
   hf_refresh: () => hfRefresh(),
 };
 
@@ -48,7 +55,7 @@ export async function drain(budgetMs = DRAIN_BUDGET_MS): Promise<StageOutcome> {
   await requeueExpired();
   let done = 0;
   const errors: string[] = [];
-  while (Date.now() - started < budgetMs) {
+  while (budgetMs - (Date.now() - started) >= DRAIN_MIN_REMAINING_MS) {
     const job = await claimNext(runnable);
     if (!job) break;
     try {
@@ -82,6 +89,7 @@ async function ingestArxiv(params: { categories?: string[]; backstopDays?: numbe
       async (wait) => {
         const items: ArxivItem[] = [];
         const errors: string[] = [];
+        let failedFeeds = 0;
         let etag: string | undefined;
         try {
           const rss = await fetchRssDelta(categories, row?.etag ?? undefined, wait);
@@ -89,13 +97,17 @@ async function ingestArxiv(params: { categories?: string[]; backstopDays?: numbe
           etag = rss.etag;
         } catch (error) {
           errors.push(`rss: ${errorMessage(error)}`);
+          failedFeeds++;
         }
         try {
-          items.push(...(await fetchBackstop(categories, from, to, wait)));
+          const backstop = await fetchBackstop(categories, from, to, wait);
+          items.push(...backstop);
+          if (backstop.incomplete) errors.push(`backstop incomplete: ${backstop.incomplete}`);
         } catch (error) {
           errors.push(`backstop: ${errorMessage(error)}`);
+          failedFeeds++;
         }
-        return { items, errors, etag };
+        return { items, errors, failedFeeds, etag };
       },
       { maxWaitMs: LEASE_WAIT_MS },
     );
@@ -109,7 +121,8 @@ async function ingestArxiv(params: { categories?: string[]; backstopDays?: numbe
     if (fetched.etag && fetched.etag !== row?.etag) {
       await db.update(sources).set({ etag: fetched.etag }).where(eq(sources.kind, "arxiv"));
     }
-    const status: RunStatus = fetched.errors.length === 0 ? "OK" : fetched.errors.length === 1 ? "PARTIAL" : "FAILED";
+    // FAILED only when both feeds failed outright; an incomplete backstop still delivered its pages.
+    const status: RunStatus = fetched.errors.length === 0 ? "OK" : fetched.failedFeeds < 2 ? "PARTIAL" : "FAILED";
     const error = fetched.errors.length ? fetched.errors.join("; ") : undefined;
     await finishRun(runId, status, inserted, error);
     return { status, items: inserted, error };
@@ -153,7 +166,9 @@ export async function ingest(): Promise<StageOutcome> {
 const HF_REFRESH_DAYS = 10;
 
 // New HF snapshots for papers shortlisted (or better, including SENT) in the last 10 days, which
-// feeds the rising lane. Papers Hugging Face does not list get no snapshot.
+// feeds the rising lane. Papers Hugging Face does not list get no snapshot. fetchDetail paces the
+// requests and retries a 429 once; the run is PARTIAL when some requests still failed (their papers
+// get no snapshot this time) and FAILED only when all of them did.
 export async function hfRefresh(): Promise<StageOutcome> {
   const runId = await startRun("hf", "hf_refresh");
   try {
@@ -164,12 +179,62 @@ export async function hfRefresh(): Promise<StageOutcome> {
         and coalesce(p.announced_at, p.submitted_at, p.created_at) >= now() - make_interval(days => ${HF_REFRESH_DAYS})`);
     const details = await fetchDetail(rows.map((r) => r.arxiv_id), await getSourceSecret("hf"));
     const written = await writeHfSignals(details);
-    const outcome: StageOutcome = { status: "OK", items: written };
-    await finishRun(runId, outcome.status, outcome.items);
+    const outcome: StageOutcome =
+      details.failed > 0
+        ? { status: "PARTIAL", items: written, error: `${details.failed} of ${rows.length} HF detail requests failed` }
+        : { status: "OK", items: written };
+    await finishRun(runId, outcome.status, outcome.items, outcome.error);
     return outcome;
   } catch (error) {
     await finishRun(runId, "FAILED", 0, errorMessage(error));
     return { status: "FAILED", items: 0, error: errorMessage(error) };
+  }
+}
+
+export const FIGURES_PER_RUN = 30;
+
+// Fetches arXiv HTML for FINALIST papers without `figures` (newest first, at most 30 per run) under
+// one arXiv lease at 3.1 s spacing, and stores their figures. A paper with no HTML version gets an
+// empty list, which records the attempt; a network error leaves it for the next run. A full batch
+// queues another run. Throws when the lease stays busy or every fetch failed, so the job is retried.
+export async function runFigures(limit = FIGURES_PER_RUN): Promise<StageOutcome> {
+  const runId = await startRun("arxiv", "figures");
+  try {
+    const rows = await db.execute<{ arxiv_id: string }>(sql`
+      select p.arxiv_id from research_signal.papers p
+      where p.status = 'FINALIST' and p.arxiv_id is not null and p.figures is null
+      order by coalesce(p.announced_at, p.submitted_at, p.created_at) desc
+      limit ${limit}`);
+    const result = await withArxivLease(
+      "figures",
+      async (wait) => {
+        let saved = 0;
+        const errors: string[] = [];
+        for (const { arxiv_id: arxivId } of rows) {
+          await wait();
+          try {
+            await saveFigures(arxivId, await fetchArxivFigures(arxivId));
+            saved++;
+          } catch (error) {
+            errors.push(`${arxivId}: ${errorMessage(error)}`);
+          }
+        }
+        return { saved, errors };
+      },
+      { maxWaitMs: LEASE_WAIT_MS },
+    );
+    if (result === "busy") throw new Error("arXiv lease busy");
+    if (result.saved === 0 && result.errors.length > 0) throw new Error(result.errors.join("; "));
+    if (rows.length === limit) await enqueue("figures");
+    const outcome: StageOutcome =
+      result.errors.length === 0
+        ? { status: "OK", items: result.saved }
+        : { status: "PARTIAL", items: result.saved, error: result.errors.join("; ") };
+    await finishRun(runId, outcome.status, outcome.items, outcome.error);
+    return outcome;
+  } catch (error) {
+    await finishRun(runId, "FAILED", 0, errorMessage(error));
+    throw error;
   }
 }
 
