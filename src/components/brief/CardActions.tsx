@@ -38,7 +38,7 @@ export function CardActions({ paperId, initial }: { paperId: string; initial: Ac
           data-action={b.action}
           aria-pressed={current === b.action}
           onClick={() => choose(b.action)}
-          className="rounded-md border px-2 py-0.5 text-xs font-medium hover:bg-muted aria-pressed:bg-foreground aria-pressed:text-background"
+          className="glass-chip glass-interactive px-2.5 py-0.5 text-xs font-medium aria-pressed:border-signal aria-pressed:bg-signal aria-pressed:text-[#03201D]"
           title={`${b.label} (${b.key})`}
         >
           {current === b.action ? "✓ " : ""}

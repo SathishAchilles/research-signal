@@ -25,9 +25,9 @@ export default function SecuritySettingsPage() {
   );
 
   return (
-    <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 px-4 py-10">
+    <section className="plate flex w-full max-w-md flex-col gap-5 p-5">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">Security</h1>
+        <h2 className="micro">Security</h2>
         <p className="mt-1 text-sm text-muted-foreground">Change the 6-digit PIN used to sign in.</p>
       </div>
       <form action={action} className="flex flex-col gap-4">
@@ -53,6 +53,6 @@ export default function SecuritySettingsPage() {
           {pending ? "Saving…" : "Change PIN"}
         </Button>
       </form>
-    </main>
+    </section>
   );
 }

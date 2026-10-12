@@ -55,17 +55,20 @@ export default function LoginPage() {
 
   return (
     <main className="flex flex-1 items-center justify-center px-4 py-16">
-      <form
-        ref={form}
-        action={action}
-        className="flex w-full max-w-xs flex-col items-center gap-6"
-      >
-        <div className="text-center">
-          <h1 className="text-xl font-semibold tracking-tight">Research Signal</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Enter your 6-digit PIN</p>
+      <form ref={form} action={action} className="glass-elevated flex w-full max-w-[24rem] flex-col items-center gap-6 px-5 py-7 sm:px-7">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <svg aria-hidden focusable="false" viewBox="0 0 32 32" className="size-9 text-signal">
+            <circle cx="16" cy="16" r="13" fill="none" stroke="currentColor" strokeWidth="1.5" opacity={0.7} />
+            <circle cx="16" cy="16" r="8" fill="none" stroke="currentColor" strokeWidth="1" strokeDasharray="2 3" opacity={0.5} />
+            <circle cx="16" cy="16" r="3" fill="currentColor" />
+          </svg>
+          <h1 className="font-display text-[28px] leading-none font-semibold tracking-tight uppercase">
+            Research <span className="text-signal-2">Signal</span>
+          </h1>
+          <p className="micro">Enter your 6-digit PIN</p>
         </div>
         <input type="hidden" name="pin" value={pin} />
-        <fieldset className="flex gap-2" disabled={pending} aria-label="PIN">
+        <fieldset className="grid w-full grid-cols-6 justify-items-center gap-1.5 sm:gap-2" disabled={pending} aria-label="PIN">
           {digits.map((digit, index) => (
             <Input
               key={index}
@@ -84,14 +87,14 @@ export default function LoginPage() {
               onChange={(event) => onChange(index, event.target.value)}
               onKeyDown={(event) => onKeyDown(index, event)}
               onPaste={(event) => onPaste(index, event)}
-              className="h-12 w-10 text-center text-lg"
+              className="h-14 w-full max-w-12 rounded-tile border-[1.5px] border-input bg-plate-solid px-0 text-center font-mono text-xl md:text-xl"
             />
           ))}
         </fieldset>
-        <p role="alert" className="min-h-5 text-center text-sm text-destructive">
+        <p role="alert" className="-my-2 min-h-5 text-center text-sm text-destructive">
           {state?.error ?? ""}
         </p>
-        <Button type="submit" className="w-full" disabled={pending || pin.length < LENGTH}>
+        <Button type="submit" className="h-10 w-full" disabled={pending || pin.length < LENGTH}>
           {pending ? "Checking…" : "Unlock"}
         </Button>
       </form>

@@ -26,10 +26,13 @@ async function Delivery() {
 
 export default function DeliveryPage() {
   return (
-    <section className="flex max-w-md flex-col gap-4">
-      <p className="text-sm text-muted-foreground">
-        The weekly brief is sent on Monday at this local time to every recipient.
-      </p>
+    <section className="plate flex w-full max-w-md flex-col gap-4 p-5">
+      <div>
+        <h2 className="micro">Delivery</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          The weekly brief is sent on Monday at this local time to every recipient.
+        </p>
+      </div>
       <Suspense fallback={<p className="text-sm text-muted-foreground">Loading delivery settings…</p>}>
         <Delivery />
       </Suspense>

@@ -15,7 +15,10 @@ const TABS = [
 export function SettingsNav() {
   const pathname = usePathname();
   return (
-    <nav aria-label="Settings" className="flex w-fit gap-1 rounded-lg bg-muted p-1">
+    <nav
+      aria-label="Settings"
+      className="plate flex w-fit max-w-full gap-1 overflow-x-auto rounded-full p-1"
+    >
       {TABS.map(({ href, label }) => {
         const active =
           pathname === href || pathname.startsWith(`${href}/`) || (pathname === "/settings" && href === TABS[0].href);
@@ -25,8 +28,8 @@ export function SettingsNav() {
             href={href}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "rounded-md px-3 py-1 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground",
-              active && "bg-background text-foreground shadow-sm",
+              "glass-interactive shrink-0 rounded-full px-3 py-1 text-sm font-medium text-muted-foreground hover:text-foreground",
+              active && "bg-signal/15 text-foreground ring-1 ring-signal/50",
             )}
           >
             {label}

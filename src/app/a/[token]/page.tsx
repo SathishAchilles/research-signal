@@ -9,10 +9,13 @@ import { RecordAction } from "./record";
 
 export default function ActionLinkPage({ params, searchParams }: PageProps<"/a/[token]">) {
   return (
-    <main className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center gap-4 px-4 py-16">
-      <Suspense fallback={<p className="text-sm text-muted-foreground">Checking the link…</p>}>
-        <ActionLink params={params} searchParams={searchParams} />
-      </Suspense>
+    <main className="flex flex-1 items-center justify-center px-4 py-16">
+      {/* One glass layer for every state (checking, invalid, valid), so nothing shifts between them. */}
+      <div className="glass-elevated flex w-full max-w-[24rem] flex-col gap-4 px-5 py-7 sm:px-7">
+        <Suspense fallback={<p className="text-sm text-muted-foreground">Checking the link…</p>}>
+          <ActionLink params={params} searchParams={searchParams} />
+        </Suspense>
+      </div>
     </main>
   );
 }
@@ -26,7 +29,8 @@ async function ActionLink({ params, searchParams }: Pick<PageProps<"/a/[token]">
   if (!claim) {
     return (
       <div className="flex flex-col gap-2">
-        <h1 className="text-xl font-semibold tracking-tight">This link is not valid</h1>
+        <p className="micro">research-signal · action link</p>
+        <h1 className="font-display text-2xl leading-tight font-semibold tracking-tight">This link is not valid</h1>
         <p className="text-sm text-muted-foreground">It may have expired (links last 30 days) or been changed. Nothing was recorded.</p>
       </div>
     );
@@ -35,24 +39,24 @@ async function ActionLink({ params, searchParams }: Pick<PageProps<"/a/[token]">
   const recorded = (await searchParams).recorded === "1";
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-muted-foreground">research-signal</p>
-      <h1 className="text-xl font-semibold tracking-tight">{paper?.title ?? "Unknown paper"}</h1>
-      <p>
-        Action: <strong>{ACTION_LABEL[claim.a]}</strong>
+      <p className="micro">research-signal</p>
+      <h1 className="font-display text-2xl leading-tight font-semibold tracking-tight">{paper?.title ?? "Unknown paper"}</h1>
+      <p className="plate flex items-baseline justify-between gap-3 px-3 py-2">
+        <span className="micro">Action:</span> <strong className="font-medium text-signal">{ACTION_LABEL[claim.a]}</strong>
       </p>
       <RecordAction token={token} alreadyRecorded={recorded} disabled={!paper} />
       <noscript>
         {recorded ? null : (
           <form method="post" action="/api/actions">
             <input type="hidden" name="token" value={token} />
-            <button type="submit" className="rounded-md border px-3 py-2 text-sm font-medium">
+            <button type="submit" className="glass-chip px-4 py-2 text-sm font-medium">
               Record “{ACTION_LABEL[claim.a]}”
             </button>
           </form>
         )}
       </noscript>
       {paper?.urlAbs ? (
-        <a className="text-sm underline" href={paper.urlAbs}>
+        <a className="text-sm text-signal underline underline-offset-4 hover:text-foreground" href={paper.urlAbs}>
           Open the abstract
         </a>
       ) : null}

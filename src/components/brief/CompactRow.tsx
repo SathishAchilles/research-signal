@@ -7,7 +7,7 @@ export function CompactRow({ card, action = null, children }: { card: CardLike; 
   return (
     <CardFrame card={card} action={action} className="py-2">
       <CueRow card={card} />
-      <p className="mt-1 text-sm leading-snug font-medium">{card.title}</p>
+      <p className="mt-1 font-heading text-sm leading-snug font-medium">{card.title}</p>
       {children}
       <AttentionLine card={card} />
     </CardFrame>

@@ -93,6 +93,8 @@ export type LogRow = {
   clientTag: string | null;
   origin: string;
   date: string;
+  figureUrl: string | null;
+  signalType: string | null;
 };
 
 export const LOG_LIMIT = 1000;
@@ -130,6 +132,8 @@ export async function listLog(filters: LogFilters): Promise<LogRow[]> {
     client_tag: string | null;
     origin: string;
     created_at: string;
+    figure_url: string | null;
+    signal_type: string | null;
   }>(sql`
     with latest as (
       select distinct on (a.paper_id) a.*
@@ -142,6 +146,9 @@ export async function listLog(filters: LogFilters): Promise<LogRow[]> {
       e.rung::text as rung,
       (select pd.verdict::text from research_signal.paper_domain pd where pd.paper_id = p.id
         order by pd.final_score desc nulls last limit 1) as verdict,
+      p.figure_url,
+      (select pd.signal_type::text from research_signal.paper_domain pd where pd.paper_id = p.id
+        order by pd.final_score desc nulls last limit 1) as signal_type,
       l.action, l.note, l.client_tag, l.origin::text as origin, l.created_at
     from latest l
     join research_signal.papers p on p.id = l.paper_id
@@ -166,6 +173,8 @@ export async function listLog(filters: LogFilters): Promise<LogRow[]> {
     clientTag: r.client_tag,
     origin: r.origin,
     date: new Date(r.created_at).toISOString().slice(0, 10),
+    figureUrl: r.figure_url,
+    signalType: r.signal_type,
   }));
 }
 

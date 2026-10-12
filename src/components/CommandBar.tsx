@@ -12,14 +12,14 @@ import {
   CommandList,
   CommandShortcut,
 } from "@/components/ui/command";
-import { cn } from "@/lib/utils";
-
-type Mode = "search" | "ask";
 type Hit = { id: number; entityType: string; paperId: string | null; title: string; publishedAt: string | null };
 
 const HIDDEN_ON = /^\/(login|a\/)/;
 const DEBOUNCE_MS = 200;
-const HIT_LIMIT = 8;
+// Instant matches shown under the Ask row. A paper can match as several docs (paper, summary, note),
+// so fetch a wider page and keep the first PAPER_LIMIT distinct papers.
+const PAPER_LIMIT = 8;
+const FETCH_LIMIT = 24;
 
 function isEditable(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -30,7 +30,6 @@ export function CommandBar() {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<Mode>("search");
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<Hit[]>([]);
   const [loading, setLoading] = useState(false);
@@ -51,21 +50,29 @@ export function CommandBar() {
     return () => window.removeEventListener("keydown", onKey);
   }, [hidden]);
 
+  // The nav's Ask pill (GlassNav) opens the dialog through this event.
+  useEffect(() => {
+    if (hidden) return;
+    const onOpen = () => setOpen(true);
+    window.addEventListener("rs:command-open", onOpen);
+    return () => window.removeEventListener("rs:command-open", onOpen);
+  }, [hidden]);
+
   const text = query.trim();
 
   useEffect(() => {
-    if (!open || mode !== "search" || text === "") return;
+    if (!open || text === "") return;
     const controller = new AbortController();
     const timer = setTimeout(async () => {
       setLoading(true);
       try {
-        const params = new URLSearchParams({ q: text, limit: String(HIT_LIMIT) });
+        const params = new URLSearchParams({ q: text, limit: String(FETCH_LIMIT) });
         const response = await fetch(`/api/search?${params}`, { signal: controller.signal });
         const body = (await response.json().catch(() => ({}))) as { hits?: Hit[]; error?: string };
         if (controller.signal.aborted) return;
         if (!response.ok) {
-          console.error("command bar search failed", response.status);
-          setError(body.error === "llm_credits_exhausted" ? "LLM credits exhausted; search needs them." : "Search failed.");
+          console.error("command bar matches failed", response.status);
+          setError(body.error === "llm_credits_exhausted" ? "LLM credits exhausted; paper matches need them." : "Paper matches failed to load.");
           setHits([]);
           return;
         }
@@ -74,8 +81,8 @@ export function CommandBar() {
       } catch (failure) {
         // A rejected fetch (network down, CORS, DNS) lands here; an abort is not a failure.
         if (controller.signal.aborted) return;
-        console.error("command bar search failed", failure instanceof Error ? failure.message : String(failure));
-        setError("Search failed.");
+        console.error("command bar matches failed", failure instanceof Error ? failure.message : String(failure));
+        setError("Paper matches failed to load.");
         setHits([]);
       } finally {
         if (!controller.signal.aborted) setLoading(false);
@@ -88,7 +95,7 @@ export function CommandBar() {
       setError(null);
       setLoading(false);
     };
-  }, [open, mode, text]);
+  }, [open, text]);
 
   const go = useCallback(
     (href: string) => {
@@ -102,107 +109,68 @@ export function CommandBar() {
 
   if (hidden) return null;
 
-  const searchHref = `/search?${new URLSearchParams({ q: text })}`;
   const askHref = `/ask?${new URLSearchParams({ q: text })}`;
-  // A paper can match as several docs (paper, summary, note); show it once.
-  const visibleHits =
-    mode === "search" && text !== ""
-      ? hits.filter((hit, i) => !hit.paperId || hits.findIndex((h) => h.paperId === hit.paperId) === i)
-      : [];
+  const searchHref = `/search?${new URLSearchParams({ q: text })}`;
+  const papers =
+    text === ""
+      ? []
+      : hits
+          .filter((hit): hit is Hit & { paperId: string } => hit.paperId !== null)
+          .filter((hit, i, all) => all.findIndex((h) => h.paperId === hit.paperId) === i)
+          .slice(0, PAPER_LIMIT);
 
   return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="fixed right-4 bottom-4 z-40 flex items-center gap-2 rounded-lg border bg-background/90 px-3 py-1.5 text-sm text-muted-foreground shadow-sm backdrop-blur hover:text-foreground print:hidden"
-      >
-        Search or ask
-        <kbd className="rounded border bg-muted px-1.5 font-mono text-xs">/</kbd>
-      </button>
-      <CommandDialog
-        open={open}
-        onOpenChange={setOpen}
-        title="Search or ask"
-        description="Search the index, or switch to Ask with Tab."
-        className="sm:max-w-xl"
-      >
-        <Command
-          shouldFilter={false}
-          onKeyDown={(event) => {
-            if (event.key !== "Tab") return;
-            event.preventDefault();
-            setMode((current) => (current === "search" ? "ask" : "search"));
-          }}
-        >
-          <div className="flex items-center gap-1 px-2 pt-2 text-xs" role="tablist" aria-label="Mode">
-            {(["search", "ask"] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                role="tab"
-                aria-selected={mode === m}
-                // Out of the tab order: Tab already switches mode, and the dialog's initial focus
-                // goes to its first tabbable element, which must be the input.
-                tabIndex={-1}
-                onClick={() => setMode(m)}
-                className={cn(
-                  "rounded-md px-2 py-0.5 capitalize text-muted-foreground",
-                  mode === m && "bg-muted font-medium text-foreground",
-                )}
-              >
-                {m}
-              </button>
-            ))}
-            <span className="ml-auto text-muted-foreground">Tab switches mode</span>
-          </div>
-          <CommandInput
-            value={query}
-            onValueChange={setQuery}
-            placeholder={mode === "search" ? "Search papers, notes, briefs…" : "Ask a question about the research…"}
-          />
-          <CommandList>
-            {text === "" ? (
-              <CommandEmpty>{mode === "search" ? "Type to search." : "Type a question."}</CommandEmpty>
-            ) : mode === "search" ? (
-              <>
-                <CommandGroup heading="Search">
-                  <CommandItem value="__search" onSelect={() => go(searchHref)}>
-                    Search for “{text}”
-                    <CommandShortcut>{loading ? "…" : "↵"}</CommandShortcut>
-                  </CommandItem>
-                </CommandGroup>
-                {error && (
-                  <p role="alert" className="px-3 py-2 text-xs text-destructive">
-                    {error}
-                  </p>
-                )}
-                {visibleHits.length > 0 && (
-                  <CommandGroup heading="Top hits">
-                    {visibleHits.map((hit) => (
-                      <CommandItem
-                        key={hit.id}
-                        value={`hit-${hit.id}`}
-                        onSelect={() => go(hit.paperId ? `/paper/${hit.paperId}` : searchHref)}
-                      >
-                        <span className="truncate">{hit.title}</span>
-                        <CommandShortcut className="tracking-normal">{hit.entityType}</CommandShortcut>
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                )}
-              </>
-            ) : (
+    <CommandDialog
+      open={open}
+      onOpenChange={setOpen}
+      title="Ask"
+      description="Ask a question about the research, or open a matching paper."
+      className="glass-elevated sm:max-w-xl print:hidden"
+    >
+      <Command shouldFilter={false}>
+        <CommandInput value={query} onValueChange={setQuery} placeholder="Ask a question, or find a paper…" />
+        <CommandList>
+          {text === "" ? (
+            <CommandEmpty>Type a question or a paper title.</CommandEmpty>
+          ) : (
+            <>
+              {/* First row, so cmdk selects it by default: Enter asks. */}
               <CommandGroup heading="Ask">
-                <CommandItem value="__ask" onSelect={() => go(askHref)}>
-                  Ask: “{text}”
+                <CommandItem value="__ask" onSelect={() => go(askHref)} className="plate my-0.5 data-[selected=true]:bg-plate-hover">
+                  <span className="truncate">Ask: “{text}”</span>
                   <CommandShortcut>↵</CommandShortcut>
                 </CommandItem>
               </CommandGroup>
-            )}
-          </CommandList>
-        </Command>
-      </CommandDialog>
-    </>
+              {error && (
+                <p role="alert" className="px-3 py-2 text-xs text-destructive">
+                  {error}
+                </p>
+              )}
+              {papers.length > 0 && (
+                <CommandGroup heading="Papers">
+                  {papers.map((hit) => (
+                    <CommandItem
+                      key={hit.paperId}
+                      value={`paper-${hit.paperId}`}
+                      className="plate my-0.5 data-[selected=true]:bg-plate-hover"
+                      onSelect={() => go(`/paper/${hit.paperId}`)}
+                    >
+                      <span className="truncate">{hit.title}</span>
+                      <CommandShortcut className="tracking-normal">{hit.entityType}</CommandShortcut>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              )}
+              <CommandGroup heading="More">
+                <CommandItem value="__all" onSelect={() => go(searchHref)} className="plate my-0.5 data-[selected=true]:bg-plate-hover">
+                  See all results
+                  <CommandShortcut>{loading ? "…" : "→"}</CommandShortcut>
+                </CommandItem>
+              </CommandGroup>
+            </>
+          )}
+        </CommandList>
+      </Command>
+    </CommandDialog>
   );
 }

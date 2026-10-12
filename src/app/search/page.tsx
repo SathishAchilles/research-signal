@@ -21,7 +21,7 @@ import { CompactRow } from "@/components/brief/CompactRow";
 import type { CardLike } from "@/components/brief/CardParts";
 import type { ActionKind } from "@/lib/brief/types";
 import type { Rung, SignalType, Verdict } from "@/lib/pipeline/rank";
-import { ResultRow, type ResultView } from "./result-row";
+import { ResultRow, RowThumb, type ResultView } from "./result-row";
 
 type RawParams = Record<string, string | string[] | undefined>;
 type Params = {
@@ -42,7 +42,8 @@ const PAGE_SIZE = 50;
 const PARAM_KEYS = ["q", "domain", "since", "until", "source", "rung", "verdict", "action", "code", "client"] as const;
 const SORT_LABELS: Record<SearchSort, string> = { relevance: "Relevance", date: "Date", attention: "Attention" };
 const SELECT_CLASS =
-  "h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
+  "h-8 w-full rounded-tile border border-input bg-plate-solid px-2 text-sm [color-scheme:dark] outline-none focus-visible:border-ring focus-visible:outline-3 focus-visible:outline-solid focus-visible:outline-focus focus-visible:outline-offset-2 focus-visible:ring-3 focus-visible:ring-ring/50";
+const LABEL_CLASS = "flex flex-col gap-1.5";
 
 function first(value: string | string[] | undefined): string {
   return (Array.isArray(value) ? value[0] : value)?.trim() ?? "";
@@ -103,6 +104,7 @@ type DetailRow = {
   domain_name: string | null;
   my_action: ActionKind | null;
   client_tag: string | null;
+  figure_url: string | null;
 };
 
 async function paperDetails(paperIds: string[], domainId: number | undefined): Promise<Map<string, DetailRow>> {
@@ -112,7 +114,7 @@ async function paperDetails(paperIds: string[], domainId: number | undefined): P
     sql`, `,
   );
   const rows = await db.execute<DetailRow>(sql`
-    select p.id, p.arxiv_id, p.url_abs, p.url_pdf, e.rung, e.hf_upvotes, e.hf_comments, e.github_repo, e.github_stars,
+    select p.id, p.arxiv_id, p.url_abs, p.url_pdf, p.figure_url, e.rung, e.hf_upvotes, e.hf_comments, e.github_repo, e.github_stars,
       nullif(coalesce(e.linked_models, 0) + coalesce(e.linked_spaces, 0), 0) as linked, e.s2_citations,
       best.verdict, best.signal_type, best.final_score, best.domain_name, latest.action as my_action, latest.client_tag
     from research_signal.papers p
@@ -186,6 +188,8 @@ function toView(hit: SearchHit, detail: DetailRow | undefined): ResultView {
     hfUpvotes: detail?.hf_upvotes ?? null,
     githubStars: detail?.github_stars ?? null,
     urlAbs: detail?.url_abs ?? null,
+    figureUrl: detail?.figure_url ?? null,
+    signalType: detail?.signal_type ?? null,
   };
 }
 
@@ -211,7 +215,7 @@ async function Results({ params }: { params: Params }) {
   } catch (error) {
     if (!(error instanceof LlmCreditsExhausted)) throw error;
     return (
-      <p role="alert" className="py-6 text-sm text-destructive">
+      <p role="alert" className="plate px-4 py-6 text-sm text-destructive">
         Search is unavailable: the LLM credits are exhausted, so the query cannot be embedded. Clear the query
         to browse with filters.
       </p>
@@ -239,22 +243,28 @@ async function Results({ params }: { params: Params }) {
     .filter(({ view }) => !tag || (view.myAction === "CLIENT" && view.clientTag?.toLowerCase() === tag))
     .slice(0, PAGE_SIZE);
 
-  if (views.length === 0) return <p className="py-6 text-sm text-muted-foreground">No results.</p>;
+  if (views.length === 0) return <p className="plate px-4 py-6 text-sm text-muted-foreground">No results.</p>;
   return (
     <>
-      <p className="text-xs text-muted-foreground">
-        {views.length} result{views.length === 1 ? "" : "s"}
+      <p className="micro" aria-live="polite">
+        <span className="num text-foreground">{views.length}</span> result{views.length === 1 ? "" : "s"}
       </p>
-      <ul className="flex flex-col gap-2">
+      {/* One plate holds every row; rows are divided, never glass. The CompactRow's own card
+          surface is flattened into the plate (focus outline, data-card and tabIndex untouched). */}
+      <ul className="plate divide-y divide-border">
         {views.map(({ view, card, action }) =>
           card ? (
-            <li key={view.id}>
+            <li
+              key={view.id}
+              className="flex items-start gap-3 py-1 pl-4 transition-colors hover:bg-plate-hover [&_[data-card]]:min-w-0 [&_[data-card]]:flex-1 [&_[data-card]]:rounded-none [&_[data-card]]:border-0 [&_[data-card]]:bg-transparent"
+            >
+              <RowThumb title={view.title} figureUrl={view.figureUrl} signalType={view.signalType} />
               <CompactRow card={card} action={action}>
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   {[view.domain, view.publishedAt?.slice(0, 10)].filter(Boolean).join(" · ")}
                   {view.clientTag ? ` · client ${view.clientTag}` : ""}
                   {" · "}
-                  <Link href={`/paper/${card.paperId}`} className="underline hover:text-foreground">
+                  <Link href={`/paper/${card.paperId}`} className="text-signal underline hover:text-foreground">
                     Open
                   </Link>
                 </p>
@@ -281,8 +291,8 @@ function Select({
   options: { value: string; label: string }[];
 }) {
   return (
-    <label className="flex flex-col gap-1 text-xs font-medium">
-      {label}
+    <label className={LABEL_CLASS}>
+      <span className="micro">{label}</span>
       <select name={name} defaultValue={value} className={SELECT_CLASS}>
         <option value="">Any</option>
         {options.map((o) => (
@@ -309,18 +319,19 @@ async function SearchView({ searchParams }: { searchParams: Promise<RawParams> }
   const weekAgo = daysAgo(7);
 
   return (
-    <div className="grid gap-6 md:grid-cols-[15rem_1fr]">
-      <aside className="flex flex-col gap-5">
+    <div className="grid items-start gap-6 md:grid-cols-[15rem_1fr]">
+      <aside aria-label="Search filters" className="glass-base flex flex-col gap-5 p-4">
+        <h2 className="micro">Filters</h2>
         <form action="/search" className="flex flex-col gap-3">
           <Input name="q" defaultValue={params.q} placeholder="Search" aria-label="Search query" />
           <Select name="domain" label="Domain" value={params.domain} options={domainOptions} />
           <div className="grid grid-cols-2 gap-2">
-            <label className="flex flex-col gap-1 text-xs font-medium">
-              From
+            <label className={LABEL_CLASS}>
+              <span className="micro">From</span>
               <Input type="date" name="since" defaultValue={params.since} />
             </label>
-            <label className="flex flex-col gap-1 text-xs font-medium">
-              To
+            <label className={LABEL_CLASS}>
+              <span className="micro">To</span>
               <Input type="date" name="until" defaultValue={params.until} />
             </label>
           </div>
@@ -349,8 +360,8 @@ async function SearchView({ searchParams }: { searchParams: Promise<RawParams> }
           </div>
         </form>
 
-        <div className="flex flex-col gap-3 border-t pt-4">
-          <h2 className="text-xs font-medium text-muted-foreground uppercase">Presets</h2>
+        <div className="flex flex-col gap-3 border-t border-rule/40 pt-4">
+          <h2 className="micro">Presets</h2>
           <form action="/search" className="flex flex-col gap-2 text-sm">
             <span>What&apos;s new in</span>
             <select name="domain" defaultValue={params.domain || domainOptions[0]?.value} className={SELECT_CLASS} required>
@@ -389,29 +400,34 @@ async function SearchView({ searchParams }: { searchParams: Promise<RawParams> }
       </aside>
 
       <section className="flex min-w-0 flex-col gap-3">
-        <nav aria-label="Sort" className="flex w-fit gap-1 rounded-lg bg-muted p-1">
-          {SEARCH_SORTS.map((sort) => (
-            <Link
-              key={sort}
-              href={hrefWith(params, { sort })}
-              aria-current={params.sort === sort ? "page" : undefined}
-              className={cn(
-                "rounded-md px-3 py-1 text-sm font-medium text-muted-foreground hover:text-foreground",
-                params.sort === sort && "bg-background text-foreground shadow-sm",
-              )}
-            >
-              {SORT_LABELS[sort]}
-            </Link>
-          ))}
-        </nav>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="micro" aria-hidden>
+            Sort
+          </span>
+          <nav aria-label="Sort" className="glass-chip flex w-fit gap-1 p-1">
+            {SEARCH_SORTS.map((sort) => (
+              <Link
+                key={sort}
+                href={hrefWith(params, { sort })}
+                aria-current={params.sort === sort ? "page" : undefined}
+                className={cn(
+                  "glass-interactive rounded-full px-3 py-1 text-sm font-medium text-muted-foreground hover:text-foreground",
+                  params.sort === sort && "bg-signal/15 text-foreground ring-1 ring-signal/50",
+                )}
+              >
+                {SORT_LABELS[sort]}
+              </Link>
+            ))}
+          </nav>
+        </div>
         {params.client && (
-          <p className="text-sm">
-            Flagged for client <span className="font-medium">{params.client}</span>
+          <p className="text-sm text-muted-foreground">
+            Flagged for client <span className="font-medium text-foreground">{params.client}</span>
           </p>
         )}
         <Suspense
           key={hrefWith(params, {})}
-          fallback={<p className="py-6 text-sm text-muted-foreground">Searching…</p>}
+          fallback={<p className="plate px-4 py-6 text-sm text-muted-foreground">Searching…</p>}
         >
           <Results params={params} />
         </Suspense>
@@ -423,7 +439,15 @@ async function SearchView({ searchParams }: { searchParams: Promise<RawParams> }
 export default function SearchPage({ searchParams }: { searchParams: Promise<RawParams> }) {
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-8">
-      <h1 className="text-2xl font-semibold tracking-tight">Search</h1>
+      <header className="flex flex-col gap-1">
+        <Link href="/ask" className="micro w-fit hover:text-signal">
+          ← Back to Ask
+        </Link>
+        <p className="micro">Research-signal · Library</p>
+        <h1 className="font-display text-4xl font-semibold tracking-tight">
+          Paper <span className="text-signal-2">search</span>
+        </h1>
+      </header>
       <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
         <SearchView searchParams={searchParams} />
       </Suspense>

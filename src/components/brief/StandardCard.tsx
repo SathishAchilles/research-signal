@@ -5,7 +5,7 @@ export function StandardCard({ card, prose, action }: { card: BriefCard; prose?:
   return (
     <CardFrame card={card} action={action}>
       <CueRow card={card} />
-      <h3 className="mt-1.5 leading-snug font-semibold">{prose?.headline || card.title}</h3>
+      <h3 className="mt-1.5 font-heading leading-snug font-semibold">{prose?.headline || card.title}</h3>
       {prose?.headline ? <p className="text-xs text-muted-foreground">{card.title}</p> : null}
       {prose?.pointer || prose?.line ? <p className="mt-1 text-sm">{prose.pointer || prose.line}</p> : null}
       <p className="mt-1 text-sm">

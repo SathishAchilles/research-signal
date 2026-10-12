@@ -24,7 +24,17 @@ export function RecordAction({ token, alreadyRecorded, disabled }: { token: stri
 
   if (disabled) return <p className="text-sm text-destructive">This paper is no longer stored, so nothing was recorded.</p>;
   return (
-    <p role="status" className={state === "error" ? "text-sm text-destructive" : "text-sm text-muted-foreground"}>
+    <p
+      role="status"
+      data-state={state}
+      className={
+        state === "error"
+          ? "text-sm text-destructive"
+          : state === "recorded"
+            ? "text-sm text-rising"
+            : "text-sm text-muted-foreground"
+      }
+    >
       {state === "pending" ? "Recording…" : state === "recorded" ? "Recorded. You can close this page." : "Could not record the action. Try again."}
     </p>
   );

@@ -5,6 +5,7 @@ import { DefaultChatTransport, type UIMessage } from "ai";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { PaperFigure, figureAttribution, isServableFigure } from "@/components/paper/PaperFigure";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,6 +16,8 @@ import {
   TOKEN,
   fillEvidenceTokens,
 } from "@/lib/ask/answer";
+import type { SignalType } from "@/lib/pipeline/rank";
+import { cn } from "@/lib/utils";
 
 type AskMessage = UIMessage<AskMetadata>;
 
@@ -38,6 +41,19 @@ export const JOB_PROMPTS = [
 ];
 
 type Coverage = AskCoverage & { warning?: string };
+
+// A cited paper's lead figure, loaded by the page for the thumbnails in the citation list, with the
+// attribution fields and the signal type the glyph fallback draws.
+export type CitedFigure = {
+  figureUrl: string | null;
+  caption: string | null;
+  signalType: SignalType | null;
+  arxivId: string | null;
+  authors: string[];
+};
+export type CitedFigures = Record<string, CitedFigure>;
+
+const THUMB = 56;
 
 function toUiMessage(m: SavedAskMessage, threadId: string): AskMessage {
   return {
@@ -81,7 +97,7 @@ function inline(text: string, cites: Map<string, AskCitation>): ReactNode[] {
     if (index > last) out.push(text.slice(last, index));
     const token = match[0];
     if (token.startsWith("**")) out.push(<strong key={index}>{token.slice(2, -2)}</strong>);
-    else if (token.startsWith("`")) out.push(<code key={index} className="rounded bg-muted px-1 text-[0.85em]">{token.slice(1, -1)}</code>);
+    else if (token.startsWith("`")) out.push(<code key={index} className="rounded bg-plate-hover px-1 font-mono text-[0.85em]">{token.slice(1, -1)}</code>);
     else {
       const ref = token.slice(1, -1);
       const cite = cites.get(ref);
@@ -110,7 +126,7 @@ function Markdown({ text, cites }: { text: string; cites: Map<string, AskCitatio
     const heading = line.match(/^(#{1,4})\s+(.*)$/);
     if (heading) {
       blocks.push(
-        <h3 key={i} className="mt-3 font-semibold">
+        <h3 key={i} className="mt-3 font-heading font-semibold">
           {inline(heading[2], cites)}
         </h3>,
       );
@@ -127,13 +143,13 @@ function Markdown({ text, cites }: { text: string; cites: Map<string, AskCitatio
       const [head, ...body] = rows;
       blocks.push(
         <div key={i} className="overflow-x-auto">
-          <table className="my-2 w-full text-left text-sm">
+          <table className="my-2 w-full text-left text-sm tabular-nums">
             <thead>
-              <tr>{head?.map((c, j) => <th key={j} className="border-b py-1 pr-3 font-medium">{inline(c, cites)}</th>)}</tr>
+              <tr>{head?.map((c, j) => <th key={j} className="border-b border-border py-1 pr-3 font-medium">{inline(c, cites)}</th>)}</tr>
             </thead>
             <tbody>
               {body.map((r, k) => (
-                <tr key={k}>{r.map((c, j) => <td key={j} className="border-b py-1 pr-3 align-top">{inline(c, cites)}</td>)}</tr>
+                <tr key={k}>{r.map((c, j) => <td key={j} className="border-b border-border py-1 pr-3 align-top">{inline(c, cites)}</td>)}</tr>
               ))}
             </tbody>
           </table>
@@ -229,28 +245,105 @@ function AnswerActions({ message, title }: { message: AskMessage; title: string 
   );
 }
 
-function Answer({ message, title, streaming }: { message: AskMessage; title: string; streaming: boolean }) {
+// The answer's cited papers as rows with a 56px figure thumbnail. Papers with no figure (or not
+// loaded yet, while the answer streams) keep the same box with the signal-type glyph. The thumbnail
+// has no caption plate, so an image's attribution sits in the row's text column instead.
+function CitedPapers({ cites, figures }: { cites: AskCitation[]; figures: CitedFigures }) {
+  if (cites.length === 0) return null;
+  const sorted = [...cites].sort((a, b) => Number(a.ref.slice(1)) - Number(b.ref.slice(1)));
+  return (
+    <div className="flex flex-col gap-2 border-t border-border pt-3">
+      <p className="micro">Cited papers</p>
+      <ol aria-label="Cited papers" className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {sorted.map((c) => {
+          const figure = figures[c.paperId];
+          const attribution = isServableFigure(figure?.figureUrl)
+            ? figureAttribution(figure.authors, figure.arxivId)
+            : null;
+          return (
+            <li key={c.ref}>
+              <Link
+                href={`/paper/${c.paperId}`}
+                className="group flex items-center gap-3 rounded-tile bg-plate-hover p-1.5 pr-3 transition-colors hover:bg-plate-solid"
+              >
+                <PaperFigure
+                  paperId={c.paperId}
+                  arxivId={figure?.arxivId ?? null}
+                  figureUrl={figure?.figureUrl ?? null}
+                  caption={figure?.caption}
+                  authors={figure?.authors ?? []}
+                  signalType={figure?.signalType ?? null}
+                  title={c.title}
+                  width={THUMB}
+                  height={THUMB}
+                  showCaption={false}
+                  linked={false}
+                  className="shrink-0"
+                />
+                <span className="flex min-w-0 flex-col gap-0.5">
+                  <span className="line-clamp-2 text-sm leading-5 text-foreground group-hover:underline">
+                    <span className="mr-1 font-mono text-primary">[{c.ref}]</span>
+                    {c.title}
+                  </span>
+                  {c.rung ? <span className="micro text-[10px]">{c.rung}</span> : null}
+                  {attribution ? (
+                    <span className="truncate font-mono text-[10.5px] tracking-[.02em] text-muted-foreground">{attribution}</span>
+                  ) : null}
+                </span>
+              </Link>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
+function Answer({
+  message,
+  title,
+  streaming,
+  figures,
+}: {
+  message: AskMessage;
+  title: string;
+  streaming: boolean;
+  figures: CitedFigures;
+}) {
   const meta = message.metadata;
   const cites = useMemo(() => citationMap(message), [message]);
   const coverage = meta?.coverage as Coverage | undefined;
   const text = displayText(message);
   return (
-    <div className="flex flex-col gap-2 rounded-lg border p-4">
+    <div className="plate flex flex-col gap-2 p-4">
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        {meta?.intent ? <Badge variant="outline">{meta.intent}</Badge> : null}
+        {meta?.intent ? (
+          <Badge variant="outline" className="glass-chip micro h-6 px-2.5 text-micro">
+            {meta.intent}
+          </Badge>
+        ) : null}
         {meta?.confidence ? (
-          <Badge variant={meta.confidence === "Low" ? "destructive" : meta.confidence === "High" ? "default" : "secondary"}>
+          <Badge
+            variant={meta.confidence === "Low" ? "destructive" : "secondary"}
+            className={cn(
+              "micro h-6 px-2.5",
+              meta.confidence === "Low" ? "text-destructive" : "glass-chip",
+              meta.confidence === "High" && "text-signal",
+            )}
+          >
+            <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />
             Confidence: {meta.confidence}
           </Badge>
         ) : null}
-        {streaming ? <span>Working…</span> : null}
+        {streaming ? <span className="micro">Working…</span> : null}
       </div>
       {meta?.confidence === "Low" ? (
-        <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">Thin evidence: treat this answer as a lead, not a conclusion.</p>
+        <p className="rounded-tile bg-destructive/10 px-3 py-2 text-sm text-destructive">Thin evidence: treat this answer as a lead, not a conclusion.</p>
       ) : null}
-      {coverage?.warning ? <p className="rounded-md bg-muted px-3 py-2 text-sm">{coverage.warning}</p> : null}
+      {coverage?.warning ? <p className="rounded-tile bg-plate-hover px-3 py-2 text-sm">{coverage.warning}</p> : null}
       {text ? <Markdown text={text} cites={cites} /> : streaming ? <p className="text-sm text-muted-foreground">Searching…</p> : null}
-      {coverage?.line ? <p className="text-xs text-muted-foreground">{coverage.line}</p> : null}
+      {coverage?.line ? <p className="font-mono text-[11px] leading-4 tracking-wide text-micro">{coverage.line}</p> : null}
+      {!streaming || cites.size ? <CitedPapers cites={[...cites.values()]} figures={figures} /> : null}
       {!streaming && text ? <AnswerActions message={message} title={title} /> : null}
     </div>
   );
@@ -275,12 +368,15 @@ export function AskPanel({
   title: initialTitle,
   saved = [],
   initialPrompt,
+  figures = {},
 }: {
   threadId?: string;
   title?: string;
   saved?: SavedAskMessage[];
   // From /ask?q=…: asked once on mount.
   initialPrompt?: string;
+  // Lead figures of the papers cited by the saved answers, keyed by paper id.
+  figures?: CitedFigures;
 }) {
   const router = useRouter();
   const [title, setTitle] = useState(initialTitle ?? initialPrompt?.trim().slice(0, 120) ?? "");
@@ -342,33 +438,51 @@ export function AskPanel({
   return (
     <div className="flex flex-col gap-4">
       {messages.length === 0 ? (
-        <div className="flex flex-wrap gap-2">
-          {JOB_PROMPTS.map((job) => (
-            <Button key={job.label} variant="outline" size="sm" onClick={() => ask(job.prompt)} title={job.prompt}>
-              {job.label}: {job.prompt}
-            </Button>
-          ))}
+        <div className="flex flex-col gap-2">
+          <p className="micro">Start from a job</p>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {JOB_PROMPTS.map((job) => (
+              <Button
+                key={job.label}
+                variant="outline"
+                size="sm"
+                onClick={() => ask(job.prompt)}
+                title={job.prompt}
+                className="h-auto min-h-14 flex-col items-start justify-start gap-1 rounded-plate px-3 py-2.5 text-left whitespace-normal"
+              >
+                <span className="micro text-[10px]">{job.label}</span>
+                <span className="text-sm leading-5 font-normal text-foreground">{job.prompt}</span>
+              </Button>
+            ))}
+          </div>
         </div>
       ) : null}
 
       <div className="flex flex-col gap-4">
         {messages.map((m, i) =>
           m.role === "user" ? (
-            <p key={m.id} className="self-end rounded-lg bg-muted px-3 py-2 text-sm">
+            <p key={m.id} className="max-w-[80%] self-end rounded-plate border border-plate-rim bg-plate-hover px-3 py-2 text-sm">
               {textOf(m)}
             </p>
           ) : (
             <Fragment key={m.id}>
-              <Answer message={m} title={title || textOf(messages[i - 1] ?? m)} streaming={busy && i === messages.length - 1} />
+              <Answer
+                message={m}
+                title={title || textOf(messages[i - 1] ?? m)}
+                streaming={busy && i === messages.length - 1}
+                figures={figures}
+              />
             </Fragment>
           ),
         )}
-        {status === "submitted" ? <p className="text-sm text-muted-foreground">Routing the question…</p> : null}
+        {status === "submitted" ? <p className="micro">Routing the question…</p> : null}
         {error ? <p role="alert" className="text-sm text-destructive">{errorMessage(error)}</p> : null}
       </div>
 
+      {/* In flow, not sticky: a sticky composer rests over the thread's figures, and figures must
+          never sit under a backdrop-filter. */}
       <form
-        className="flex flex-col gap-2"
+        className="glass-base flex flex-col gap-2 p-2"
         onSubmit={(e) => {
           e.preventDefault();
           ask(input);
@@ -380,6 +494,7 @@ export function AskPanel({
           placeholder="Ask about a term, a bet, a use case, a field, a date or a client meeting"
           maxLength={2000}
           rows={3}
+          className="bg-plate-solid"
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
@@ -387,8 +502,9 @@ export function AskPanel({
             }
           }}
         />
-        <div className="flex justify-end">
-          <Button type="submit" disabled={busy || !input.trim()}>
+        <div className="flex items-center justify-between gap-2 px-1">
+          <span className="micro hidden text-[10px] sm:inline">Enter to ask · Shift+Enter for a new line</span>
+          <Button type="submit" className="ml-auto" disabled={busy || !input.trim()}>
             {busy ? "Answering…" : "Ask"}
           </Button>
         </div>
