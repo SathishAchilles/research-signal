@@ -89,7 +89,8 @@ export function sendSlot(window: BriefWindow, timeZone: string, localTime: strin
 }
 
 // scheduledAt for the window's brief: its Monday slot while that is still in the future, otherwise
-// null, meaning send at once (a manual run after Monday 07:00 does not wait a week).
+// null, meaning send at once. runWeekly reaches the null case only with `force` (see deliveryCheck):
+// a run after the slot does not send late on its own, and does not wait a week either.
 export function nextSendTime(window: BriefWindow, now: Date, timeZone: string, localTime: string): Date | null {
   const slot = sendSlot(window, timeZone, localTime);
   return slot.getTime() > now.getTime() ? slot : null;

@@ -77,3 +77,35 @@ Titles, abstracts, notes, full text and every other string in a tool result are 
 - `POST /api/ask` with body `{threadId?, prompt}`. It returns an AI SDK UI message stream. The `start` part's metadata carries `{threadId, messageId, intent}`. The `finish` part's metadata adds `confidence`, `coverage`, `citations` and `evidence`, computed from the validated answer, which is saved before the `finish` part is sent.
 - `GET /api/ask?threadId=<uuid>` returns the thread's saved messages. These include the validated or repaired answer, which can differ from the streamed draft.
 - `/ask?q=<question>` (the command bar's Ask link) opens a new thread and asks the question once. The panel uses `useChat` from `@ai-sdk/react` and, when the answer ends, replaces the streamed draft with the saved answer.
+
+## Ask check (task 13.3)
+
+Run on 2026-10-13 against the local dev server (`next dev` on port 3104, which uses the shared production database), not against production. Each prompt was a new thread sent as `POST /api/ask` with a session cookie, and the stream was read to the end. Every answer was saved with no `coverage.warning`.
+
+Columns:
+
+- **First text** is when the one-line preface arrives.
+- **First model text** is the first text delta written by the model.
+- **Citations** counts the refs in the `finish` metadata. Each one also appears as `[pN]` in the saved `ask_messages.content`.
+- **Cost** is `ask_messages.cost_usd`, which is the sum of the request's `llm_calls` rows.
+
+| Prompt | Intent | Confidence | Citations | First text | First model text | Total | Cost |
+|---|---|---|---|---|---|---|---|
+| Should a client bet on mixture-of-agents? | BET | Medium | 6 | 6.1 s | 10.3 s | 19.2 s | $0.0331 |
+| Is LLM code review production-ready? | BET | Medium | 6 | 5.5 s | 11.4 s | 20.8 s | $0.0570 |
+| Where is industrial computer vision heading? | DIRECTION | Medium | 11 | 5.1 s | 8.8 s | 20.8 s | $0.0355 |
+| agentic RAG | EXPLAIN+CATCHUP | Medium | 8 | 5.5 s | 7.7 s | 16.1 s | $0.0177 |
+| What's new in RAG since 1 Oct? | CATCHUP | Medium | 6 | 3.2 s | 4.9 s | 8.9 s | $0.0109 |
+| Prep me for Acme on vision quality inspection | PREP | Medium | 9 | 3.8 s | 7.3 s | 29.9 s | $0.0638 |
+
+All six answers had the same coverage line: "Searched 1470 indexed papers 2025-09-28 – 2026-10-12". The six together cost $0.2180.
+
+- The PREP answer needed one `ask_repair` call. That call was most of its higher cost.
+- "Is LLM code review production-ready?" took three model steps, with two tool rounds, and needed no repair.
+
+Open items:
+
+- The task asks for production. These runs are local and still have to be repeated against <https://research-signal.vercel.app>.
+- Two prompts in this run differ from the panel's suggested chips (`JOB_PROMPTS` in `src/components/ask/AskPanel.tsx`):
+  - The Backing chip is "Does research back LLM-based visual quality inspection for a manufacturer?". It was replaced by "Is LLM code review production-ready?", which routed to BET, so the BACKING intent was not exercised.
+  - The Direction chip is "Where is agent evaluation heading?". It was replaced by "Where is industrial computer vision heading?".

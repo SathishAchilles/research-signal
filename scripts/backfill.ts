@@ -9,7 +9,7 @@ import { buildBrief } from "@/lib/brief/weekly";
 import { briefWindow } from "@/lib/brief/window";
 import { runEmbed1, runEmbed2 } from "@/lib/pipeline/embed";
 import { runEnrich } from "@/lib/pipeline/enrich";
-import { type JobStage, claimNext, complete } from "@/lib/pipeline/jobs";
+import { type JobStage, claimNext, complete, enqueue } from "@/lib/pipeline/jobs";
 import { runScore } from "@/lib/pipeline/score";
 import { runFigures } from "@/lib/pipeline/stages";
 import { DEFAULT_CATEGORIES, fetchBackstopPage, upsertArxivItems } from "@/lib/sources/arxiv";
@@ -254,6 +254,9 @@ async function main() {
       console.log(`  ${kind}: ${r[kind].status}, ${r[kind].items} snapshots${r[kind].error ? ` (${r[kind].error})` : ""}`);
     }
     console.log(`  rankAll: ranked ${r.ranked}, promoted ${r.promoted}`);
+    // As the cron's enrich job does: newly promoted FINALISTs need figures, so queue that job. The figures
+    // stage below settles it once every FINALIST has figures; otherwise the cron's drain picks it up.
+    await enqueue("figures");
     await settleJobs("enrich");
   });
 

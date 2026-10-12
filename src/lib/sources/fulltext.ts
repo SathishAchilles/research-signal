@@ -88,9 +88,12 @@ export function htmlToText(html: string): string {
 
 type HtmlPage = { html: string; url: string };
 
+// Null means "this URL has no HTML": a 404, or a 200 that is not HTML. Any other failure (429, 5xx,
+// other statuses, network errors) throws, so callers leave `figures` NULL and the paper is retried.
 async function fetchPage(url: string, accept = "text/html"): Promise<HtmlPage | null> {
   const response = await httpGet(url, { accept }, 30_000);
-  if (!response.ok) return null;
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`);
   const type = response.headers.get("content-type") ?? "";
   if (!type.includes("html")) return null;
   return { html: await response.text(), url: response.url || url };
@@ -103,7 +106,8 @@ async function fetchHtml(url: string, accept = "text/html"): Promise<string | nu
 const arxivHtmlUrl = (arxivId: string) => `https://arxiv.org/html/${encodeURIComponent(arxivId)}`;
 
 // One arXiv HTML request; the caller holds the arXiv lease and has already waited. Returns the
-// page's figures, or an empty list when arXiv has no HTML version.
+// page's figures, or an empty list when arXiv has no HTML version (404). Throws on 429, 5xx and
+// network errors, so nothing is saved and the paper stays eligible for the next figures run.
 export async function fetchArxivFigures(arxivId: string): Promise<Figure[]> {
   const page = await fetchPage(arxivHtmlUrl(arxivId));
   return page ? extractFigures(page.html, page.url) : [];

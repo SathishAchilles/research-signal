@@ -17,7 +17,7 @@ Weekly AI/ML research brief for a technology-strategy consultant: scans monitore
 
 ## Setup
 
-Requirements: Node.js 20+, `psql`, and a Supabase project with `pg_cron`, `pg_net` and `vector` available.
+Requirements: Node.js 20+ and a Supabase project with `pg_cron`, `pg_net` and `vector` available.
 
 1. Install dependencies and create the local env file, then fill in the values (each one is described in `.env.example`):
 
@@ -26,7 +26,9 @@ Requirements: Node.js 20+, `psql`, and a Supabase project with `pg_cron`, `pg_ne
    cp .env.example .env.local
    ```
 
-2. Bootstrap the schema and the `rs_app` role, as `postgres` (needs `DATABASE_ADMIN_URL`; pass the role's password inline):
+Steps 2 to 4 run the SQL files in `scripts/sql/` in this order. `npm run sql -- <file>` connects with `DATABASE_ADMIN_URL`, which is the `postgres` role. The files that `rs_app` must run (because it owns the tables) set `DATABASE_ADMIN_URL="$DATABASE_MIGRATION_URL"` for that one command. That override reads the URL from your shell, so first run `export DATABASE_MIGRATION_URL=<the rs_app session-pooler URL from .env.local>`. A variable that is already set in the shell takes precedence over `--env-file`. Each file's header names the role that runs it.
+
+2. Bootstrap the schema and the `rs_app` role, as `postgres`, passing the role's password inline:
 
    ```sh
    RS_APP_PASSWORD=<password> npm run sql -- scripts/sql/001_bootstrap.sql
@@ -38,13 +40,20 @@ Requirements: Node.js 20+, `psql`, and a Supabase project with `pg_cron`, `pg_ne
    npm run db:migrate
    ```
 
-4. Indexes and row-level security, as `rs_app` (the table owner), then functions and views as `postgres`:
+4. Apply the remaining SQL files in order:
 
    ```sh
-   psql "$DATABASE_MIGRATION_URL" -f scripts/sql/002_indexes_rls.sql
-   npm run sql -- scripts/sql/003_functions.sql
-   npm run sql -- scripts/sql/004_views.sql
+   DATABASE_ADMIN_URL="$DATABASE_MIGRATION_URL" npm run sql -- scripts/sql/002_indexes_rls.sql      # rs_app: indexes, RLS
+   npm run sql -- scripts/sql/003_functions.sql                                                     # postgres: hybrid_search and helpers
+   npm run sql -- scripts/sql/004_views.sql                                                         # postgres: latest_signals, evidence
+   DATABASE_ADMIN_URL="$DATABASE_MIGRATION_URL" npm run sql -- scripts/sql/006_jobs_dedupe.sql      # rs_app: one PENDING job per stage
+   DATABASE_ADMIN_URL="$DATABASE_MIGRATION_URL" npm run sql -- scripts/sql/007_search_verdict.sql   # rs_app half first
+   npm run sql -- scripts/sql/007_search_verdict.sql                                                # then the postgres half
+   DATABASE_ADMIN_URL="$DATABASE_MIGRATION_URL" npm run sql -- scripts/sql/008_paper_figures.sql    # rs_app: paper figures, figures stage
+   DATABASE_ADMIN_URL="$DATABASE_MIGRATION_URL" npm run sql -- scripts/sql/009_llm_call_request.sql # rs_app: per-request Ask cost
    ```
+
+   `005_cron.sql` is applied last, in step 9, after the deploy.
 
 5. Seed the settings row, the starting domains and the sources (re-running resets them to the defaults but keeps the PIN hash and run state):
 
@@ -66,7 +75,7 @@ Requirements: Node.js 20+, `psql`, and a Supabase project with `pg_cron`, `pg_ne
 
 8. Run the app locally with `npm run dev`, or deploy by pushing to `main`.
 
-9. After the production deploy answers `/api/health` with OK, create the six `rs_*` cron jobs with `scripts/sql/005_cron.sql` (created in task 12.5), as `postgres`:
+9. After the production deploy answers `/api/health` with OK, create the six `rs_*` cron jobs as `postgres`. `scripts/sql/005_cron.sql` has not been written yet (task 12.5). Once it exists:
 
    ```sh
    CRON_SECRET=<secret> APP_URL=https://research-signal.vercel.app npm run sql -- scripts/sql/005_cron.sql

@@ -12,11 +12,11 @@ import { errorMessage } from "@/lib/sources/types";
 import { syncVenues } from "@/lib/sources/venues";
 import { composeBrief } from "./compose";
 import { renderEmail } from "./email";
-import { finalRerank } from "./rerank";
+import { type StoredJudgement, finalRerank } from "./rerank";
 import { isEmptySelection, selectBrief } from "./select";
 import { fillTokens } from "./tokens";
-import type { BriefDoc, BriefProse, BriefSelection, Evidence, RerankJudgement } from "./types";
-import { type BriefWindow, briefWindow, dayMonth, nextSendTime, zonedParts } from "./window";
+import type { BriefDoc, BriefProse, BriefSelection, Evidence } from "./types";
+import { type BriefWindow, briefWindow, dayMonth, nextSendTime, sendSlot, zonedParts } from "./window";
 
 export type WeeklyOutcome = { status: RunStatus; items: number; error?: string };
 
@@ -80,8 +80,8 @@ function searchBody(doc: BriefDoc): string {
   return lines.join("\n");
 }
 
-function storedRerank(json: unknown): RerankJudgement[] | undefined {
-  const rerank = (json as Partial<BriefDoc> | null)?.rerank;
+function storedRerank(json: unknown): StoredJudgement[] | undefined {
+  const rerank: StoredJudgement[] | undefined = (json as Partial<BriefDoc> | null)?.rerank;
   // An empty array means no rerank ran (no FINALISTs, or a failed judge); never reuse it.
   return Array.isArray(rerank) && rerank.length > 0 ? rerank : undefined;
 }
@@ -209,7 +209,8 @@ async function s2Refresh(window: BriefWindow): Promise<void> {
   }
 }
 
-// scheduledFor is null when the window's Monday slot has passed and the brief goes out at once.
+// scheduledFor is null when the window's Monday slot has passed and the brief goes out at once
+// (reachable only with `force`; see deliveryCheck).
 type SendResult = { resendId: string | null; scheduledFor: Date | null; dryRun: boolean };
 
 type Previous = { resendId: string | null; status: string } | undefined;
@@ -249,15 +250,64 @@ async function sendBrief(built: BuiltBrief, now: Date, dryRun: boolean, previous
   return { resendId: data.id, scheduledFor, dryRun: false };
 }
 
+export type DeliveryCheck = { send: true } | { send: false; reason: string };
+
+// Whether runWeekly may build and send the window's brief. Without `force` it never re-sends a week that
+// is already SCHEDULED or SENT, and never sends a brief late once the window's Monday slot has passed:
+// that would arrive mid-week looking like a new week's brief. `force` keeps the manual re-send path
+// (reschedule before the slot, send at once after it).
+export function deliveryCheck(input: {
+  isoWeek: string;
+  status: string | undefined;
+  slot: Date;
+  now: Date;
+  force: boolean;
+}): DeliveryCheck {
+  if (input.force) return { send: true };
+  if (input.status === "SCHEDULED" || input.status === "SENT") {
+    return { send: false, reason: `brief ${input.isoWeek} is already ${input.status}; not rebuilding or re-sending it without force` };
+  }
+  if (input.slot.getTime() <= input.now.getTime()) {
+    return {
+      send: false,
+      reason: `send slot for ${input.isoWeek} (${input.slot.toISOString()}) has passed; not sending it late without force`,
+    };
+  }
+  return { send: true };
+}
+
 // Sunday job: venue diffs, best-effort S2 refresh, centroids, then build, send (scheduled for Monday)
-// and mark the brief's papers SENT. DRY_RUN=1 skips the Resend call and leaves the brief READY.
+// and mark the brief's papers SENT. DRY_RUN=1 skips the Resend call and leaves the brief READY. It does
+// nothing (SKIPPED) when deliveryCheck refuses, unless `force` is set.
 export async function runWeekly(
-  options: { now?: Date; dryRun?: boolean; rerank?: boolean } = {},
+  options: { now?: Date; dryRun?: boolean; rerank?: boolean; force?: boolean } = {},
 ): Promise<WeeklyOutcome & { briefId?: string; isoWeek: string; dryRun: boolean }> {
   const now = options.now ?? new Date();
   const dryRun = options.dryRun ?? process.env.DRY_RUN === "1";
   const window = briefWindow(now);
   const notes: string[] = [];
+
+  // Checked before any source refresh or build: buildBrief overwrites a delivered brief's json and html.
+  const [settings] = await db
+    .select({ timezone: appSettings.timezone, sendLocalTime: appSettings.sendLocalTime })
+    .from(appSettings)
+    .where(eq(appSettings.id, 1));
+  if (!settings) throw new Error("app_settings row is missing; run npm run seed");
+  const [current] = await db
+    .select({ id: briefs.id, status: briefs.status })
+    .from(briefs)
+    .where(eq(briefs.isoWeek, window.isoWeek));
+  const check = deliveryCheck({
+    isoWeek: window.isoWeek,
+    status: current?.status,
+    slot: sendSlot(window, settings.timezone, settings.sendLocalTime),
+    now,
+    force: options.force ?? false,
+  });
+  if (!check.send) {
+    console.log(`weekly: skipped; ${check.reason}`);
+    return { status: "SKIPPED", items: 0, error: check.reason, briefId: current?.id, isoWeek: window.isoWeek, dryRun };
+  }
 
   const venues = await syncVenues("weekly").catch((error: unknown) => {
     notes.push(`venues: ${errorMessage(error)}`);

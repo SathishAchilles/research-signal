@@ -5,10 +5,11 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import pLimit from "p-limit";
 import { z } from "zod";
 import { db } from "@/db/client";
-import { appSettings, domains, paperDomain, papers, signalType } from "@/db/schema";
+import { appSettings, domains, paperDomain, papers, signalType, sourceRuns } from "@/db/schema";
 import { LlmCreditsExhausted, llmCall } from "@/lib/llm/call";
 import { chatModel } from "@/lib/llm/openrouter";
 import { indexPaperSummaries } from "@/lib/search/index";
+import { errorMessage } from "@/lib/sources/types";
 import { enqueue } from "./jobs";
 import { rankAll } from "./rank";
 
@@ -48,6 +49,8 @@ export type ScoreResult = {
   remaining: boolean;
   ranked: number;
   promoted: number;
+  // Set when the search-summary indexing after scoring failed; the scores themselves were kept.
+  indexError?: string;
 };
 
 type Candidate = { id: string; title: string; abstract: string; domainIds: number[] };
@@ -162,6 +165,27 @@ async function candidates(paperIds?: string[], limit = SCORE_LIMIT): Promise<Can
   return rows.map((r) => ({ ...r, domainIds: r.domainIds.map(Number) }));
 }
 
+// Search-summary indexing is best effort: the scores are already written and indexPaperSummaries heals
+// missing summaries on its next call, so a failure is logged and recorded in source_runs instead of failing
+// the run. Running out of LLM credits (the embedding call) is returned so runScore still throws it.
+type IndexOutcome = { error?: string; credits?: LlmCreditsExhausted };
+
+async function indexSummaries(paperIds: string[]): Promise<IndexOutcome> {
+  try {
+    await indexPaperSummaries(paperIds);
+    return {};
+  } catch (error) {
+    if (error instanceof LlmCreditsExhausted) return { credits: error };
+    const message = `search summaries not indexed for ${paperIds.length} papers: ${errorMessage(error)}`;
+    console.warn(`score: ${message}`);
+    await db
+      .insert(sourceRuns)
+      .values({ sourceKind: null, stage: "score_index", finishedAt: new Date(), status: "PARTIAL", items: 0, error: message })
+      .catch((insertError: unknown) => console.warn(`score: index failure not recorded: ${errorMessage(insertError)}`));
+    return { error: message };
+  }
+}
+
 export async function runScore(options: { paperIds?: string[]; limit?: number } = {}): Promise<ScoreResult> {
   const limit = Math.min(options.limit ?? SCORE_LIMIT, SCORE_LIMIT);
   const pending = await candidates(options.paperIds, limit);
@@ -211,9 +235,9 @@ export async function runScore(options: { paperIds?: string[]; limit?: number } 
 
   const touched = [...new Set(pending.flatMap((p) => p.domainIds))];
   const { ranked, promoted } = scored > 0 ? await rankAll(touched) : { ranked: 0, promoted: 0 };
-  if (scored > 0) await indexPaperSummaries(pending.map((p) => p.id));
+  const index: IndexOutcome = scored > 0 ? await indexSummaries(pending.map((p) => p.id)) : {};
 
-  const credits = errors.find((e) => e instanceof LlmCreditsExhausted);
+  const credits = errors.find((e) => e instanceof LlmCreditsExhausted) ?? index.credits;
   if (credits) throw credits;
   if (errors.length === batches.length) throw errors[0];
 
@@ -223,5 +247,13 @@ export async function runScore(options: { paperIds?: string[]; limit?: number } 
     remaining = Boolean(more);
     if (remaining && (scored > 0 || pending.length === limit)) await enqueue("score");
   }
-  return { scored, batches: batches.length, failedBatches: errors.length, remaining, ranked, promoted };
+  return {
+    scored,
+    batches: batches.length,
+    failedBatches: errors.length,
+    remaining,
+    ranked,
+    promoted,
+    ...(index.error ? { indexError: index.error } : {}),
+  };
 }
