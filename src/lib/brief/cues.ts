@@ -10,6 +10,15 @@ export const COLORS = {
   verdict: { CLIENT: "#D55E00", READ: "#0072B2", SKIP: "#8A8F98" },
 } as const;
 
+// Web UI on dark plates. The email keeps COLORS (Okabe-Ito on white); do not change COLORS.
+export const COLORS_UI = {
+  ink: "#E6F4F3",
+  muted: "#9DB8BC",
+  rule: "#4FA3A8",
+  rising: "#3DDC97",
+  verdict: { CLIENT: "#FF8A50", READ: "#56B4E9", SKIP: "#A7AEB8" },
+} as const;
+
 export const VERDICT_LABEL = { CLIENT: "BRING TO CLIENT", READ: "READ", SKIP: "SKIP" } as const;
 export const RUNG_LEVEL = { LAB: 1, CODE: 2, MODEL: 3, PEER: 4 } as const;
 export const SIGNAL_BORDER = { BENCH: "solid", EVAL: "dashed", REFRAME: "dotted", METHOD: "double" } as const;

@@ -5,11 +5,36 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  /* fonts: fixes the self-reference at globals.css:10 [R] */
+  --font-sans: var(--font-inter);
+  --font-heading: var(--font-space-grotesk);
+  --font-display: var(--font-space-grotesk);
+  --font-mono: var(--font-jetbrains-mono);
+
+  /* shadcn semantic map (unchanged names, new values below) */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -18,27 +43,29 @@
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
-  --color-card: var(--card);
+
+  /* new brand tokens -> utilities: bg-plate, text-signal, border-rule, ... */
+  --color-canvas: var(--bg-0);
+  --color-plate: var(--plate);
+  --color-plate-solid: var(--plate-solid);
+  --color-plate-hover: var(--plate-hover);
+  --color-plate-rim: var(--plate-rim);
+  --color-signal: var(--signal);       /* teal accent (not shadcn --accent!) */
+  --color-signal-2: var(--signal-2);
+  --color-micro: var(--micro);
+  --color-rule: var(--rule);
+  --color-chip-border: var(--chip-border);
+  --color-rising: var(--rising);
+  --color-focus: var(--focus);
+  --color-verdict-client: var(--verdict-client);
+  --color-verdict-read: var(--verdict-read);
+  --color-verdict-skip: var(--verdict-skip);
+
+  /* -> utilities rounded-glass / rounded-plate / rounded-tile.
+     Raw values live in :root so the hand-written @utility CSS below can read them too. */
+  --radius-glass: var(--glass-radius);
+  --radius-plate: var(--plate-radius);
+  --radius-tile: var(--tile-radius);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -46,67 +73,81 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+  --ease-glass: var(--glass-ease);
 }
 
-:root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+:root, .dark {
+  color-scheme: dark;
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-}
+  --glass-radius: 1.25rem;            /* 20px shell */
+  --plate-radius: 0.75rem;            /* 12px = 20 - 8 padding (concentric) */
+  --tile-radius: 0.625rem;            /* 10px: inputs, PIN cells, inner tiles */
+  --glass-ease: cubic-bezier(.2,.8,.2,1);
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  /* canvas */
+  --bg-0: #050D10;
+  --bg-glow-1: #0A2A2E;
+  --bg-glow-peak: #1E6B6E;           /* worst-case backdrop for every contrast figure */
+
+  /* plates (content) */
+  --plate: rgb(12 26 31 / .92);       /* flattened worst case #102A2D */
+  --plate-solid: #0C1A1F;
+  --plate-hover: #12272C;
+  --plate-rim: rgb(127 224 230 / .14); /* decorative hairline, not meaningful */
+
+  /* glass (chrome) */
+  --glass-tint: rgb(6 24 30 / .62);
+  --glass-tint-nav: rgb(6 24 30 / .80);
+  --glass-tint-elev: rgb(8 30 36 / .78);
+  --glass-sheen: rgb(158 220 226 / .06);
+  --glass-rim: rgb(127 224 230 / .22);
+  --glass-rim-top: rgb(200 245 247 / .38);
+  --glass-hi: rgb(255 255 255 / .14);
+  --glass-solid: #0F2227;
+  --glass-filter: blur(16px) saturate(170%) brightness(.95);
+  --glass-filter-nav: blur(14px) saturate(170%) brightness(.95);
+  --glass-filter-elev: blur(24px) saturate(190%) brightness(.95);
+  --glass-shadow: 0 12px 40px rgb(0 0 0 / .45);
+  --glass-shadow-elev: 0 24px 64px rgb(0 0 0 / .55);
+  --glow-signal: 0 0 24px rgb(63 224 208 / .25); /* helix nodes + linked card only */
+
+  /* text */
+  --text: #E6F4F3;
+  --text-muted: #9DB8BC;
+  --micro: #7FD9DD;
+  --signal: #3FE0D0;
+  --signal-2: #3FB8BD;
+  --rule: #4FA3A8;
+  --chip-border: #5E9EA3;             /* meaningful borders: signal chips, inputs */
+  --focus: #7FDBFF;
+
+  /* cues (mirror COLORS_UI in src/lib/brief/cues.ts) */
+  --verdict-client: #FF8A50;
+  --verdict-read: #56B4E9;
+  --verdict-skip: #A7AEB8;
+  --rising: #3DDC97;
+
+  /* shadcn semantic remap: ui/* inherit the palette with almost no edits */
+  --background: var(--bg-0);
+  --foreground: var(--text);
+  --card: var(--plate);
+  --card-foreground: var(--text);
+  --popover: var(--glass-solid);      /* select/tooltip popups stay solid (no extra blur layer) */
+  --popover-foreground: var(--text);
+  --primary: var(--signal);
+  --primary-foreground: #03201D;      /* 10.41:1 on #3FE0D0 */
+  --secondary: var(--plate-hover);
+  --secondary-foreground: var(--text);
+  --muted: var(--plate-hover);
+  --muted-foreground: var(--text-muted);
+  --accent: #17333A;                  /* shadcn hover fill */
+  --accent-foreground: var(--text);
+  --destructive: #FF6B6B;
+  --border: #1F3A40;
+  --input: var(--chip-border);        /* input boundary >= 3:1 (WCAG 1.4.11) */
+  --ring: var(--focus);
+  --chart-1: #3FE0D0; --chart-2: #3FB8BD; --chart-3: #56B4E9; --chart-4: #3DDC97; --chart-5: #A7AEB8;
+  /* sidebar (shadcn, unused by the app; values carried over from the previous .dark block) */
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);
@@ -117,14 +158,137 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+/* rung 1: no backdrop-filter support -> solid */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root { --glass-tint: var(--glass-solid); --glass-tint-nav: var(--glass-solid); --glass-tint-elev: var(--glass-solid); }
+}
+
+/* reduced transparency (Chromium 118+) and the manual "Solid panels" toggle (Safari/Firefox users) */
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --glass-tint: var(--glass-solid); --glass-tint-nav: var(--glass-solid); --glass-tint-elev: var(--glass-solid);
+    --plate: var(--plate-solid); --glass-sheen: transparent;
+    --glass-filter: none; --glass-filter-nav: none; --glass-filter-elev: none;
+    --glow-signal: none;
+  }
+}
+:root[data-glass="off"] {
+  --glass-tint: var(--glass-solid); --glass-tint-nav: var(--glass-solid); --glass-tint-elev: var(--glass-solid);
+  --plate: var(--plate-solid); --glass-sheen: transparent;
+  --glass-filter: none; --glass-filter-nav: none; --glass-filter-elev: none;
+  --glow-signal: none;
+}
+
+/* more contrast: solid surfaces, 2px meaningful rims */
+@media (prefers-contrast: more) {
+  :root {
+    --glass-tint: var(--glass-solid); --glass-tint-nav: var(--glass-solid); --glass-tint-elev: var(--glass-solid);
+    --plate: var(--plate-solid);
+    --glass-filter: none; --glass-filter-nav: none; --glass-filter-elev: none;
+    --glass-rim: var(--text-muted); --glass-rim-top: var(--text-muted); --plate-rim: var(--chip-border);
+    --text-muted: #B9D0D3;
+  }
+}
+
 @layer base {
-  * {
-    @apply border-border outline-ring/50;
+  * { @apply border-border outline-ring/50; }
+  body { @apply bg-background text-foreground font-sans; }
+  body::before {                      /* static page glow on its own fixed layer; never animated (see 8) */
+    content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+    background:
+      radial-gradient(60rem 40rem at 78% 8%, color-mix(in srgb, var(--bg-glow-peak) 55%, transparent), transparent 70%),
+      radial-gradient(50rem 36rem at 10% 0%, var(--bg-glow-1), transparent 70%),
+      var(--bg-0);
   }
-  body {
-    @apply bg-background text-foreground;
+  .num, td, th { font-variant-numeric: tabular-nums; }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+}
+
+/* glass recipes (spec section 3) */
+@utility glass-base {          /* rails, sticky domain bar, hero shell, composer */
+  background: linear-gradient(to bottom, var(--glass-sheen), transparent 40%), var(--glass-tint);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
+  border: 1px solid var(--glass-rim);
+  border-top-color: var(--glass-rim-top);
+  border-radius: var(--glass-radius);
+  box-shadow: inset 0 1px 0 var(--glass-hi), inset 0 -1px 0 rgb(0 0 0 / .2), var(--glass-shadow);
+  text-shadow: 0 1px 2px rgb(0 0 0 / .5);
+}
+
+@utility glass-nav {           /* the capsule top nav: the only refracting surface */
+  background: linear-gradient(to bottom, var(--glass-sheen), transparent 50%), var(--glass-tint-nav);
+  -webkit-backdrop-filter: var(--glass-filter-nav);
+  backdrop-filter: var(--glass-filter-nav);
+  border: 1px solid var(--glass-rim);
+  border-top-color: var(--glass-rim-top);
+  border-radius: 9999px;
+  box-shadow: inset 0 1px 0 var(--glass-hi), inset 0 -1px 0 rgb(0 0 0 / .2), var(--glass-shadow);
+  text-shadow: 0 1px 2px rgb(0 0 0 / .5);
+
+  /* rung 3: SVG refraction. @supports alone is not enough because Safari and Firefox
+     PARSE url() in backdrop-filter and then paint nothing, so @supports passes there.
+     It is also gated on the [data-refract] flag, which the boot script sets only when
+     navigator.userAgentData.brands contains "Chromium". It is also off under reduced
+     transparency, more contrast, and data-glass=off. */
+  @supports (backdrop-filter: url("#rs-lens")) {
+    @media (prefers-reduced-transparency: no-preference) and (prefers-contrast: no-preference) {
+      :root[data-refract]:not([data-glass="off"]) & {
+        backdrop-filter: url("#rs-lens") blur(12px) saturate(170%) brightness(.95);
+      }
+    }
   }
-  html {
-    @apply font-sans;
+}
+
+@utility glass-elevated {      /* CommandBar dialog, ? help modal, shadcn Dialog popup */
+  background: linear-gradient(to bottom, var(--glass-sheen), transparent 40%), var(--glass-tint-elev);
+  -webkit-backdrop-filter: var(--glass-filter-elev);
+  backdrop-filter: var(--glass-filter-elev);
+  border: 1px solid var(--glass-rim);
+  border-top-color: var(--glass-rim-top);
+  border-radius: var(--glass-radius);
+  box-shadow: inset 0 1px 0 var(--glass-hi), var(--glass-shadow-elev);
+}
+
+@utility glass-chip {          /* domain chips, filter pills, badges, action buttons: NO backdrop-filter */
+  background: rgb(127 224 230 / .08);
+  border: 1px solid var(--glass-rim);
+  border-radius: 9999px;
+}
+
+@utility glass-interactive {   /* adds pointer specular + press; combine with glass-chip or glass-base */
+  position: relative;
+  isolation: isolate;
+  transition: transform .2s var(--glass-ease), background-color .2s, border-color .15s;
+  &::before {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: -1;
+    background: radial-gradient(120px circle at var(--mx, 50%) var(--my, 0%), rgb(255 255 255 / .18), transparent 60%);
+    opacity: 0; transition: opacity .2s;
   }
+  &:hover::before { opacity: 1; }
+  &:hover { border-color: var(--glass-rim-top); }
+  &:active { transform: scale(.97); }
+  &:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+    &::before { transition: none; }
+    &:active { transform: none; }
+  }
+}
+
+@utility plate {               /* content surface: cards, tables, charts, answers, PIN cells */
+  text-shadow: none;           /* stop glass-base text-shadow inheriting into content */
+  background: var(--plate);
+  border: 1px solid var(--plate-rim);
+  border-radius: var(--plate-radius);
+}
+
+@utility micro {               /* uppercase micro-label */
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 11px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--micro);
+}
+
+@media (forced-colors: active) {
+  .glass-base, .glass-nav, .glass-elevated, .glass-chip, .plate { border: 1px solid CanvasText; }
 }
