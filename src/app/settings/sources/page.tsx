@@ -50,7 +50,8 @@ async function Sources() {
   );
   if (views.length === 0) return <p className="text-sm text-muted-foreground">No sources. Run npm run seed.</p>;
   return (
-    <div className="grid gap-3 md:grid-cols-2">
+    // Status lines inside each source card read at 14px below lg.
+    <div className="grid gap-3 md:grid-cols-2 touch:[&_p.text-xs]:text-sm">
       {views.map((view) => (
         <SourceCard key={view.kind} source={view} />
       ))}

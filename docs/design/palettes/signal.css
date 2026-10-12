@@ -1,0 +1,74 @@
+/* research-signal palette: Signal (current teal)
+   Bioinformatics cockpit: deep petrol, cyan instrument light.
+   Drop-in for the :root token block in src/app/globals.css (same token names). To trial it without
+   editing source, inject this file after globals.css (e.g. Playwright addInitScript / addStyleTag).
+   Contrast: see docs/design/palettes/README.md (computed against this palette's own flattened worst case:
+   glass tints over --bg-glow-peak, nav/plate over --signal particle cores). */
+:root {
+  /* canvas */
+  --bg-0: #050D10;
+  --bg-glow-1: #0A2A2E;
+  --bg-glow-peak: #1E6B6E;            /* worst-case backdrop for every contrast figure */
+
+  /* plates (content) */
+  --plate: rgb(12 26 31 / 0.92);
+  --plate-solid: #0C1A1F;
+  --plate-hover: #12272C;
+  --plate-rim: rgb(127 224 230 / 0.14);
+
+  /* glass (chrome) */
+  --glass-tint: rgb(6 24 30 / 0.62);
+  --glass-tint-nav: rgb(6 24 30 / 0.8);
+  --glass-tint-elev: rgb(8 30 36 / 0.78);
+  --glass-sheen: rgb(158 220 226 / 0.06);
+  --glass-rim: rgb(127 224 230 / 0.22);
+  --glass-rim-top: rgb(200 245 247 / 0.38);
+  --glass-solid: #0F2227;
+  --glow-signal: 0 0 24px rgb(63 224 208 / 0.25);
+
+  /* text + accents */
+  --text: #E6F4F3;
+  --text-muted: #9DB8BC;
+  --micro: #7FD9DD;
+  --signal: #3FE0D0;
+  --signal-2: #3FB8BD;
+  --rule: #4FA3A8;
+  --chip-border: #5E9EA3;
+  --focus: #7FDBFF;
+
+  /* cues: mirror COLORS_UI in src/lib/brief/cues.ts (inline styles read COLORS_UI, not these tokens) */
+  --verdict-client: #FF8A50;
+  --verdict-read: #56B4E9;
+  --verdict-skip: #A7AEB8;
+  --rising: #3DDC97;
+
+  /* shadcn semantic layer */
+  --primary-foreground: #03201D;
+  --accent: #17333A;
+  --destructive: #FF6B6B;
+  --border: #1F3A40;
+  --chart-1: #3FE0D0; --chart-2: #3FB8BD; --chart-3: #56B4E9; --chart-4: #3DDC97; --chart-5: #A7AEB8;
+}
+
+/* Re-assert the solid fallbacks: a later :root block would otherwise beat globals.css's
+   media-query :root blocks and bring translucent glass back under these preferences. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root { --glass-tint: var(--glass-solid); --glass-tint-nav: var(--glass-solid); --glass-tint-elev: var(--glass-solid); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  :root { --glass-tint: var(--glass-solid); --glass-tint-nav: var(--glass-solid); --glass-tint-elev: var(--glass-solid);
+    --plate: var(--plate-solid); --glass-sheen: transparent; --glow-signal: none; }
+}
+:root[data-glass="off"] {
+  --glass-tint: var(--glass-solid); --glass-tint-nav: var(--glass-solid); --glass-tint-elev: var(--glass-solid);
+  --plate: var(--plate-solid); --glass-sheen: transparent; --glow-signal: none;
+}
+@media (prefers-contrast: more) {
+  :root { --glass-tint: var(--glass-solid); --glass-tint-nav: var(--glass-solid); --glass-tint-elev: var(--glass-solid);
+    --plate: var(--plate-solid); --text-muted: #B9D0D3;
+    --glass-rim: var(--text-muted); --glass-rim-top: var(--text-muted); --plate-rim: var(--chip-border); --glow-signal: none; }
+}
+
+/* Outside :root: the glass-chip utility hardcodes its fill (globals.css @utility glass-chip).
+   Kept inside @layer utilities so hover:/state utilities still win, exactly as with the original. */
+@layer utilities { .glass-chip { background: rgb(127 224 230 / 0.08); } }

@@ -98,7 +98,7 @@ async function load(id: string) {
 }
 
 const chip =
-  "glass-chip glass-interactive inline-flex h-7 items-center px-3 text-[0.8rem] font-medium hover:text-foreground";
+  "glass-chip glass-interactive inline-flex h-7 items-center px-3 text-[0.8rem] font-medium hover:text-foreground touch:h-11 touch:px-4 touch:text-sm";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -257,10 +257,11 @@ async function PaperView({ id }: { id: string }) {
                 signalType={signalType}
                 width={LEAD_W}
                 height={LEAD_H}
-                className="overflow-hidden rounded-tile"
+                sizes="(min-width: 1024px) 960px, 100vw"
+                className="overflow-hidden rounded-tile max-sm:[&>a]:h-64!"
               />
               {gallery.length > 1 ? (
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-5">
                   {gallery.slice(1).map((f) => (
                     <PaperFigure
                       key={f.url}
@@ -273,7 +274,8 @@ async function PaperView({ id }: { id: string }) {
                       signalType={signalType}
                       width={THUMB_W}
                       height={THUMB_H}
-                      className="overflow-hidden rounded-tile"
+                      sizes="(min-width: 640px) 184px, 100vw"
+                      className="overflow-hidden rounded-tile max-sm:w-full! max-sm:[&>a]:h-52!"
                     />
                   ))}
                 </div>
@@ -345,7 +347,10 @@ async function PaperView({ id }: { id: string }) {
                 <tr className="border-b border-border">
                   {["Captured", "HF upvotes", "Comments", "GitHub", "Stars", "Models", "Spaces", "Venue", "Review", "Citations"].map(
                     (h) => (
-                      <th key={h} className="micro px-3 py-2 font-medium whitespace-nowrap first:pl-4">
+                      <th
+                        key={h}
+                        className="micro px-3 py-2 font-medium whitespace-nowrap first:sticky first:left-0 first:z-10 first:bg-plate-solid first:pl-4"
+                      >
                         {h}
                       </th>
                     ),
@@ -355,7 +360,7 @@ async function PaperView({ id }: { id: string }) {
               <tbody>
                 {signalRows.map((s) => (
                   <tr key={s.id} className="border-t border-border first:border-t-0 hover:bg-plate-hover">
-                    <td className="py-1.5 pr-3 pl-4 whitespace-nowrap">{date(s.capturedAt)}</td>
+                    <td className="sticky left-0 z-10 bg-plate-solid py-1.5 pr-3 pl-4 whitespace-nowrap">{date(s.capturedAt)}</td>
                     <td className="px-3 py-1.5">{s.hfUpvotes ?? "–"}</td>
                     <td className="px-3 py-1.5">{s.hfComments ?? "–"}</td>
                     <td className="px-3 py-1.5">
@@ -402,8 +407,11 @@ async function PaperView({ id }: { id: string }) {
         {relatedRows.length ? (
           <ul className="plate flex flex-col divide-y divide-border text-sm">
             {relatedRows.map((r) => (
-              <li key={r.id} className="flex items-baseline justify-between gap-3 px-4 py-2 hover:bg-plate-hover">
-                <Link className="underline-offset-4 hover:text-signal hover:underline" href={`/paper/${r.id}`}>
+              <li key={r.id} className="flex items-baseline justify-between gap-3 px-4 py-2 hover:bg-plate-hover touch:items-center touch:py-1">
+                <Link
+                  className="underline-offset-4 hover:text-signal hover:underline touch:flex touch:min-h-11 touch:items-center"
+                  href={`/paper/${r.id}`}
+                >
                   {r.title}
                 </Link>
                 <span className="micro shrink-0 num">

@@ -26,7 +26,8 @@ async function Delivery() {
 
 export default function DeliveryPage() {
   return (
-    <section className="plate flex w-full max-w-md flex-col gap-4 p-5">
+    // Helper text inside the form reads at 14px below lg.
+    <section className="plate flex w-full max-w-md flex-col gap-4 p-5 touch:[&_p.text-xs]:text-sm">
       <div>
         <h2 className="micro">Delivery</h2>
         <p className="mt-1 text-sm text-muted-foreground">

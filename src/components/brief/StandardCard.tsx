@@ -1,12 +1,16 @@
 import type { ActionKind, BriefCard } from "@/lib/brief/types";
 import { AttentionLine, CardFrame, type CardProse, CueRow, MoreDetails } from "./CardParts";
 
+// Below lg and on touch: 44px source links, 14px detail text, and an anchor offset that clears the
+// sticky nav plus the taller chips bar.
+export const CARD_TOUCH = "tap-links scroll-mt-36 touch:[&_details_p]:text-sm";
+
 export function StandardCard({ card, prose, action }: { card: BriefCard; prose?: CardProse; action: ActionKind | null }) {
   return (
-    <CardFrame card={card} action={action}>
+    <CardFrame card={card} action={action} className={CARD_TOUCH}>
       <CueRow card={card} />
       <h3 className="mt-1.5 font-heading leading-snug font-semibold">{prose?.headline || card.title}</h3>
-      {prose?.headline ? <p className="text-xs text-muted-foreground">{card.title}</p> : null}
+      {prose?.headline ? <p className="text-sm text-muted-foreground lg:text-xs">{card.title}</p> : null}
       {prose?.pointer || prose?.line ? <p className="mt-1 text-sm">{prose.pointer || prose.line}</p> : null}
       <p className="mt-1 text-sm">
         <span className="font-semibold">Client angle:</span> {prose?.clientAngle || card.clientAngle}

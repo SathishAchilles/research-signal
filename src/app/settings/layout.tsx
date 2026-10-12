@@ -10,7 +10,11 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
             Settings
           </h1>
         </div>
-        <SettingsNav />
+        {/* Below sm the tab strip becomes a 3-column grid so all five tabs stay visible (no hidden overflow);
+            every tab is a 44px tap target below lg. */}
+        <div className="tap-links max-sm:[&_a]:justify-center max-sm:[&>nav]:grid max-sm:[&>nav]:w-full max-sm:[&>nav]:grid-cols-3 max-sm:[&>nav]:rounded-glass">
+          <SettingsNav />
+        </div>
       </header>
       {children}
     </main>

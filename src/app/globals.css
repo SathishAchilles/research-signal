@@ -3,6 +3,12 @@
 @import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark *));
+/* touch: phones and tablets (coarse pointer) plus any viewport below lg, where controls get 44px tap targets */
+@custom-variant touch {
+  @media (pointer: coarse), (width < 64rem) {
+    @slot;
+  }
+}
 
 @theme inline {
   /* fonts: fixes the self-reference at globals.css:10 [R] */
@@ -294,4 +300,36 @@
 
 @media (forced-colors: active) {
   .glass-base, .glass-nav, .glass-elevated, .glass-chip, .plate { border: 1px solid CanvasText; }
+}
+
+/* Mobile layout (sizing and scrolling only; no colour). Below lg, and on any coarse pointer, every
+   form control and disclosure gets a 44px tap target (Apple HIG, WCAG 2.5.5). :where() keeps the
+   specificity at zero, so an explicit min-h-* utility still wins. */
+@layer base {
+  @media (pointer: coarse), (width < 64rem) {
+    :where(button, select, [role="button"], [role="tab"],
+      input:not([type="checkbox"], [type="radio"], [type="hidden"], [type="range"], [type="file"], [type="color"])) {
+      min-height: 2.75rem;
+    }
+    :where(summary) { padding-block: max(0px, calc((2.75rem - 1lh) / 2)); }
+  }
+}
+
+/* Links inside the element (card source links, tab strips) become 44 x 44px tap targets on touch. */
+@utility tap-links {
+  @media (pointer: coarse), (width < 64rem) {
+    & a[href]:not(:has(img, svg)) { display: inline-flex; align-items: center; justify-content: center; min-height: 2.75rem; min-width: 2.75rem; }
+  }
+}
+
+/* A horizontal scroller whose overflow fades out at the edges instead of showing a scrollbar on touch. */
+@utility scroll-fade-x {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-padding-inline: 1rem;
+  @media (pointer: coarse), (width < 64rem) {
+    scrollbar-width: none;
+    mask-image: linear-gradient(to right, transparent, #000 .75rem, #000 calc(100% - 2.5rem), transparent);
+    &::-webkit-scrollbar { display: none; }
+  }
 }

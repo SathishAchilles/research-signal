@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 const HIDDEN_ON = /^\/(login|a\/)/;
@@ -31,6 +31,18 @@ export function GlassNavPlaceholder() {
 export function GlassNav() {
   const pathname = usePathname();
   const links = useRef<HTMLUListElement>(null);
+  const [overflow, setOverflow] = useState(false);
+
+  // The link row fades at the right edge only when it actually overflows (narrower than ~340px).
+  useEffect(() => {
+    const list = links.current;
+    if (!list) return;
+    const measure = () => setOverflow(list.scrollWidth > list.clientWidth + 1);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, [pathname]);
 
   // On narrow screens the link row scrolls sideways; keep the current page's link in view.
   useEffect(() => {
@@ -47,7 +59,7 @@ export function GlassNav() {
       <nav aria-label="Primary" className="glass-nav flex h-14 items-center gap-1 px-3">
         <Link
           href="/"
-          className="hidden shrink-0 items-center gap-2 rounded-full px-1.5 py-1 text-[var(--text)] sm:flex"
+          className="flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-2 rounded-full px-1.5 text-[var(--text)] lg:justify-start"
         >
           <svg viewBox="0 0 24 24" className="size-6" aria-hidden="true" focusable="false">
             <circle cx="12" cy="12" r="9.5" fill="none" stroke="var(--signal)" strokeWidth="1.5" />
@@ -63,7 +75,8 @@ export function GlassNav() {
 
         <ul
           ref={links}
-          className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [mask-image:linear-gradient(to_right,#000_85%,transparent)] [scrollbar-width:none] md:justify-center md:[mask-image:none]"
+          data-overflow={overflow || undefined}
+          className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none] data-[overflow]:[mask-image:linear-gradient(to_right,#000_85%,transparent)] md:justify-center"
         >
           {LINKS.map(({ href, label }) => {
             const current = isCurrent(pathname, href);
@@ -73,7 +86,7 @@ export function GlassNav() {
                   href={href}
                   aria-current={current ? "page" : undefined}
                   className={cn(
-                    "relative block rounded-full px-2 py-1.5 text-sm text-[var(--text)] transition-colors hover:bg-white/5 sm:px-3",
+                    "relative flex h-11 min-w-11 items-center justify-center rounded-full px-2 text-sm text-[var(--text)] transition-colors hover:bg-white/5 sm:px-3 lg:h-9",
                     current &&
                       "bg-white/[.06] font-medium text-[var(--signal)] after:absolute after:inset-x-3 after:-bottom-px after:h-px after:bg-[var(--signal)]",
                   )}
@@ -91,7 +104,7 @@ export function GlassNav() {
           aria-haspopup="dialog"
           aria-keyshortcuts="/ Meta+K Control+K"
           title="Ask (/ or ⌘K)"
-          className="glass-chip glass-interactive flex h-9 shrink-0 items-center gap-2 px-3 text-sm text-[var(--text)] print:hidden"
+          className="glass-chip glass-interactive flex size-11 shrink-0 items-center justify-center gap-2 text-sm text-[var(--text)] md:w-auto md:px-3 lg:h-9 print:hidden"
         >
           <svg viewBox="0 0 16 16" className="size-3.5" aria-hidden="true" focusable="false">
             <circle cx="7" cy="7" r="4.5" fill="none" stroke="var(--micro)" strokeWidth="1.5" />

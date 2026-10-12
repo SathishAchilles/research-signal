@@ -20,7 +20,7 @@ export function SourceHealthFooter({ selection, proseSource }: { selection: Brie
   return (
     <footer className="plate mt-4 flex flex-col gap-4 p-4 text-muted-foreground">
       <SpecTable caption="Source health" rows={rows} />
-      <p className="border-t border-rule pt-3 text-xs">
+      <p className="border-t border-rule pt-3 text-sm lg:text-xs">
         Legend: bar and label = suggested verdict; [####] = evidence rung (LAB, CODE, MODEL, PEER); boxed tag = signal
         type (BENCH solid, EVAL dashed, REFRAME dotted, METHOD double).
       </p>

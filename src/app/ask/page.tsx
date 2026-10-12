@@ -9,7 +9,8 @@ import { askMessages, askThreads, papers } from "@/db/schema";
 import type { SignalType } from "@/lib/pipeline/rank";
 import { cn } from "@/lib/utils";
 
-const THREAD_LIMIT = 50;
+// The rail shows only the most recent threads; older ones stay reachable by their /ask?thread= link.
+const THREAD_LIMIT = 3;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Paper ids cited by the saved answers. citations is untyped jsonb, so only well-formed ids are kept.
@@ -90,30 +91,40 @@ async function AskView({ searchParams }: { searchParams: Promise<Record<string, 
   );
 
   return (
-    <div className="grid grid-cols-1 gap-6 md:grid-cols-[220px_minmax(0,1fr)] md:items-start">
-      <nav aria-label="Threads" className="glass-base flex flex-col gap-1 p-3 text-sm md:sticky md:top-[76px] md:max-h-[calc(100dvh-6.5rem)] md:overflow-y-auto">
-        <p className="micro px-2 pb-1">Threads</p>
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[240px_minmax(0,1fr)] lg:items-start lg:gap-6">
+      {/* Below lg the threads are a horizontal chip row above the conversation; at lg they are a
+          sticky sidebar. Rows are shrink-0 so the flex column never squeezes them (an overflow-hidden
+          flex item has a zero min-height and was being clipped through its text). */}
+      <nav
+        aria-label="Threads"
+        className="glass-base flex flex-row items-center gap-2 overflow-x-auto overscroll-x-contain p-2 [scrollbar-width:none] text-sm lg:sticky lg:top-[76px] lg:flex-col lg:items-stretch lg:gap-1 lg:overflow-visible lg:p-3"
+      >
+        <p className="micro hidden px-2 pb-1 lg:block">Recent threads</p>
         <Link
           href="/ask"
           aria-current={thread ? undefined : "page"}
-          className="glass-chip glass-interactive mb-2 px-3 py-1.5 font-medium"
+          className="glass-chip glass-interactive shrink-0 px-3 py-2 leading-5 font-medium whitespace-nowrap lg:mb-2"
         >
           + New question
         </Link>
-        {threads.map((t) => (
-          <Link
-            key={t.id}
-            href={`/ask?thread=${t.id}`}
-            aria-current={t.id === thread?.id ? "page" : undefined}
-            className={cn(
-              "truncate rounded-tile px-2 py-1.5 text-muted-foreground hover:bg-plate-hover hover:text-foreground",
-              t.id === thread?.id && "bg-plate-hover text-foreground",
-            )}
-            title={t.title}
-          >
-            {t.title}
-          </Link>
-        ))}
+        {threads.map((t) => {
+          const isActive = t.id === thread?.id;
+          return (
+            <Link
+              key={t.id}
+              href={`/ask?thread=${t.id}`}
+              aria-current={isActive ? "page" : undefined}
+              data-active={isActive || undefined}
+              className={cn(
+                "block max-w-[14rem] min-w-0 shrink-0 truncate rounded-tile border border-transparent px-3 py-2 leading-5 text-muted-foreground hover:bg-plate-hover hover:text-foreground lg:max-w-none",
+                isActive && "border-border bg-plate-hover font-medium text-foreground",
+              )}
+              title={t.title}
+            >
+              {t.title}
+            </Link>
+          );
+        })}
       </nav>
       <AskPanel
         key={thread?.id ?? "new"}

@@ -10,7 +10,8 @@ type Status = "idle" | "playing" | "paused";
 const RATES = [0.8, 1, 1.25, 1.5] as const;
 const PREFS_KEY = "rs-listen";
 const CHUNK_MAX = 200; // Chrome drops utterances that run past ~15s; short chunks keep it reading.
-const LANG_ORDER = ["en-in", "en-gb", "en-us"];
+const DEFAULT_VOICE = "Google UK English Female";
+const MAX_VOICES = 8;
 const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
 
 const chip =
@@ -32,7 +33,7 @@ function voicesSnapshot(): SpeechSynthesisVoice[] {
   const key = all.map((v) => v.voiceURI).join("|");
   if (key !== voiceKey) {
     voiceKey = key;
-    voiceCache = all.filter((v) => v.lang.toLowerCase().startsWith("en"));
+    voiceCache = curateVoices(all);
   }
   return voiceCache;
 }
@@ -42,12 +43,87 @@ function subscribeVoices(onChange: () => void) {
   return () => window.speechSynthesis.removeEventListener("voiceschanged", onChange);
 }
 
+// --- voice curation: English only, no macOS novelty/effect voices, Google first, at most 8 -------
+
+// macOS ships these as joke or effect voices (bubbles, bells, whispering, robots...). Matched on the
+// name before any "(...)" suffix, so "Eddy (English (UK))" is caught too.
+const NOVELTY_VOICES = new Set(
+  [
+    "Albert", "Bad News", "Bahh", "Bells", "Boing", "Bubbles", "Cellos", "Good News", "Jester", "Organ",
+    "Superstar", "Trinoids", "Whisper", "Wobble", "Zarvox", "Deranged", "Hysterical", "Pipe Organ",
+    "Junior", "Ralph", "Fred", "Kathy", "Princess", "Grandma", "Grandpa", "Eddy", "Flo", "Reed",
+    "Rocko", "Sandy", "Shelley",
+  ].map((n) => n.toLowerCase()),
+);
+// Well-recorded system voices across macOS/iOS, in the order they are offered.
+const QUALITY_VOICES = ["daniel", "samantha", "karen", "moira", "rishi", "tessa", "serena", "arthur"];
+const GOOGLE_ORDER = ["google uk english female", "google uk english male", "google us english"];
+
+const langOf = (v: SpeechSynthesisVoice) => v.lang.toLowerCase().replace("_", "-");
+const baseName = (v: SpeechSynthesisVoice) => v.name.replace(/\s*\(.*$/, "").trim();
+const isGoogle = (v: SpeechSynthesisVoice) => /^google\b/i.test(v.name);
+const isEnhanced = (v: SpeechSynthesisVoice) => /\((enhanced|premium)\)/i.test(v.name);
+
+function voiceRank(v: SpeechSynthesisVoice): number {
+  const name = v.name.toLowerCase();
+  if (isGoogle(v)) {
+    const g = GOOGLE_ORDER.indexOf(name);
+    return g === -1 ? GOOGLE_ORDER.length : g;
+  }
+  const q = QUALITY_VOICES.indexOf(baseName(v).toLowerCase());
+  if (q !== -1) return 10 + q;
+  if (/^microsoft\b/i.test(v.name)) return 30; // Windows/Edge system voices
+  return 40;
+}
+
+function curateVoices(all: SpeechSynthesisVoice[]): SpeechSynthesisVoice[] {
+  const english = all.filter((v) => langOf(v).startsWith("en") && !NOVELTY_VOICES.has(baseName(v).toLowerCase()));
+  // "Daniel (Enhanced)" only stays when there is no plain "Daniel" for the same language.
+  const plain = new Set(english.filter((v) => !isEnhanced(v)).map((v) => `${baseName(v).toLowerCase()}|${langOf(v)}`));
+  const seen = new Set<string>();
+  const kept = english.filter((v) => {
+    const key = `${baseName(v).toLowerCase()}|${langOf(v)}`;
+    if (isEnhanced(v) && plain.has(key)) return false;
+    if (seen.has(key)) return false; // same voice exposed twice (e.g. two voiceURIs)
+    seen.add(key);
+    return true;
+  });
+  return kept
+    .map((v, i) => ({ v, i, r: voiceRank(v) }))
+    .sort((a, b) => a.r - b.r || a.i - b.i)
+    .slice(0, MAX_VOICES)
+    .map(({ v }) => v);
+}
+
 function preferredVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
-  for (const lang of LANG_ORDER) {
-    const matches = voices.filter((v) => v.lang.toLowerCase().replace("_", "-").startsWith(lang));
-    if (matches.length) return matches.find((v) => v.localService) ?? matches[0];
+  const exact = voices.find((v) => v.name === DEFAULT_VOICE);
+  if (exact) return exact;
+  const tiers: ((v: SpeechSynthesisVoice) => boolean)[] = [
+    (v) => isGoogle(v) && langOf(v).startsWith("en-gb"),
+    (v) => langOf(v).startsWith("en-gb"),
+    (v) => langOf(v).startsWith("en-in"),
+    (v) => langOf(v).startsWith("en-us"),
+  ];
+  for (const match of tiers) {
+    const found = voices.find(match);
+    if (found) return found;
   }
   return voices[0] ?? null;
+}
+
+const REGIONS: Record<string, string> = {
+  gb: "UK", us: "US", in: "India", au: "Australia", ie: "Ireland", za: "South Africa", nz: "New Zealand", ca: "Canada",
+};
+// "Google UK English Female" -> "UK English Female (Google)"; "Daniel" (en-GB) -> "Daniel (UK)";
+// "Microsoft Sonia Online (Natural) - English (United Kingdom)" -> "Sonia (Microsoft, UK)".
+function voiceLabel(v: SpeechSynthesisVoice): string {
+  if (isGoogle(v)) return `${v.name.replace(/^google\s+/i, "")} (Google)`;
+  const region = REGIONS[langOf(v).split("-")[1] ?? ""];
+  const ms = v.name.match(/^microsoft\s+(\S+)/i);
+  if (ms) return `${ms[1]} (Microsoft${region ? `, ${region}` : ""})`;
+  const base = baseName(v) || v.name;
+  const tag = [isEnhanced(v) ? "Enhanced" : "", region ?? ""].filter(Boolean).join(", ");
+  return tag ? `${base} (${tag})` : base;
 }
 
 // --- prefs (per viewer; storage can be missing or throw) -----------------------------------------
@@ -338,7 +414,7 @@ export default function ReadAloud({ title, segments, className }: { title: strin
           >
             {voices.map((v) => (
               <option key={v.voiceURI} value={v.voiceURI}>
-                {v.name} ({v.lang})
+                {voiceLabel(v)}
               </option>
             ))}
           </select>

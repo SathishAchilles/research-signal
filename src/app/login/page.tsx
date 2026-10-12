@@ -94,7 +94,7 @@ export default function LoginPage() {
         <p role="alert" className="-my-2 min-h-5 text-center text-sm text-destructive">
           {state?.error ?? ""}
         </p>
-        <Button type="submit" className="h-10 w-full" disabled={pending || pin.length < LENGTH}>
+        <Button type="submit" className="h-10 w-full touch:h-11" disabled={pending || pin.length < LENGTH}>
           {pending ? "Checking…" : "Unlock"}
         </Button>
       </form>

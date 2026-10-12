@@ -260,7 +260,7 @@ async function Results({ params }: { params: Params }) {
             >
               <RowThumb title={view.title} figureUrl={view.figureUrl} signalType={view.signalType} />
               <CompactRow card={card} action={action}>
-                <p className="mt-0.5 text-xs text-muted-foreground">
+                <p className="mt-0.5 text-sm text-muted-foreground lg:text-xs">
                   {[view.domain, view.publishedAt?.slice(0, 10)].filter(Boolean).join(" · ")}
                   {view.clientTag ? ` · client ${view.clientTag}` : ""}
                   {" · "}
@@ -317,86 +317,111 @@ async function SearchView({ searchParams }: { searchParams: Promise<RawParams> }
   const options = await facetOptions();
   const domainOptions = options.domains.map((d) => ({ value: String(d.id), label: d.name }));
   const weekAgo = daysAgo(7);
+  const activeFilters = PARAM_KEYS.filter((key) => key !== "q" && params[key]).length;
 
   return (
     <div className="grid items-start gap-6 md:grid-cols-[15rem_1fr]">
-      <aside aria-label="Search filters" className="glass-base flex flex-col gap-5 p-4">
-        <h2 className="micro">Filters</h2>
-        <form action="/search" className="flex flex-col gap-3">
-          <Input name="q" defaultValue={params.q} placeholder="Search" aria-label="Search query" />
-          <Select name="domain" label="Domain" value={params.domain} options={domainOptions} />
-          <div className="grid grid-cols-2 gap-2">
-            <label className={LABEL_CLASS}>
-              <span className="micro">From</span>
-              <Input type="date" name="since" defaultValue={params.since} />
-            </label>
-            <label className={LABEL_CLASS}>
-              <span className="micro">To</span>
-              <Input type="date" name="until" defaultValue={params.until} />
-            </label>
-          </div>
-          <Select name="source" label="Source" value={params.source} options={asOptions(options.sources)} />
-          <Select name="rung" label="Minimum rung" value={params.rung} options={asOptions(rung.enumValues)} />
-          <Select name="verdict" label="Verdict" value={params.verdict} options={asOptions(verdict.enumValues)} />
-          <Select name="action" label="My action" value={params.action} options={asOptions(actionKind.enumValues)} />
-          <Select
-            name="code"
-            label="Has code"
-            value={params.code}
-            options={[
-              { value: "yes", label: "Yes" },
-              { value: "no", label: "No" },
-            ]}
-          />
-          {params.client && <input type="hidden" name="client" value={params.client} />}
-          <input type="hidden" name="sort" value={params.sort} />
-          <div className="flex gap-2">
-            <Button type="submit" size="sm">
-              Apply
-            </Button>
-            <Link href="/search" className={buttonVariants({ size: "sm", variant: "ghost" })}>
-              Reset
-            </Link>
-          </div>
-        </form>
+      <aside aria-label="Search filters" className="glass-base p-4">
+        {/* Below md the panel folds behind a disclosure so a phone shows results first. From md up it is
+            always open: the summary hides and ::details-content is forced visible. A browser without
+            ::details-content keeps the summary, so the panel is still reachable there. */}
+        <details
+          open={!params.q && activeFilters === 0}
+          className="group/filters md:[&::details-content]:block md:[&::details-content]:[content-visibility:visible]"
+        >
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 touch:min-h-11 supports-[selector(::details-content)]:md:hidden [&::-webkit-details-marker]:hidden">
+            <span className="micro">
+              Filters and presets
+              {activeFilters ? <span className="num text-foreground"> · {activeFilters} on</span> : null}
+            </span>
+            <svg
+              viewBox="0 0 16 16"
+              className="size-4 transition-transform group-open/filters:rotate-180"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </summary>
+          <div className="flex flex-col gap-5 pt-4 supports-[selector(::details-content)]:md:pt-0">
+            <h2 className="micro max-md:sr-only">Filters</h2>
+            <form action="/search" className="flex flex-col gap-3">
+              <Input name="q" defaultValue={params.q} placeholder="Search" aria-label="Search query" />
+              <Select name="domain" label="Domain" value={params.domain} options={domainOptions} />
+              <div className="grid grid-cols-2 gap-2 md:max-lg:grid-cols-1">
+                <label className={LABEL_CLASS}>
+                  <span className="micro">From</span>
+                  <Input type="date" name="since" defaultValue={params.since} />
+                </label>
+                <label className={LABEL_CLASS}>
+                  <span className="micro">To</span>
+                  <Input type="date" name="until" defaultValue={params.until} />
+                </label>
+              </div>
+              <Select name="source" label="Source" value={params.source} options={asOptions(options.sources)} />
+              <Select name="rung" label="Minimum rung" value={params.rung} options={asOptions(rung.enumValues)} />
+              <Select name="verdict" label="Verdict" value={params.verdict} options={asOptions(verdict.enumValues)} />
+              <Select name="action" label="My action" value={params.action} options={asOptions(actionKind.enumValues)} />
+              <Select
+                name="code"
+                label="Has code"
+                value={params.code}
+                options={[
+                  { value: "yes", label: "Yes" },
+                  { value: "no", label: "No" },
+                ]}
+              />
+              {params.client && <input type="hidden" name="client" value={params.client} />}
+              <input type="hidden" name="sort" value={params.sort} />
+              <div className="flex gap-2">
+                <Button type="submit" size="sm">
+                  Apply
+                </Button>
+                <Link href="/search" className={cn(buttonVariants({ size: "sm", variant: "ghost" }), "touch:h-11")}>
+                  Reset
+                </Link>
+              </div>
+            </form>
 
-        <div className="flex flex-col gap-3 border-t border-rule/40 pt-4">
-          <h2 className="micro">Presets</h2>
-          <form action="/search" className="flex flex-col gap-2 text-sm">
-            <span>What&apos;s new in</span>
-            <select name="domain" defaultValue={params.domain || domainOptions[0]?.value} className={SELECT_CLASS} required>
-              {domainOptions.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-            <span>since</span>
-            <Input type="date" name="since" defaultValue={params.since || weekAgo} required />
-            <input type="hidden" name="sort" value="attention" />
-            <Button type="submit" size="sm" variant="outline">
-              Show
-            </Button>
-          </form>
-          <form action="/search" className="flex flex-col gap-2 text-sm">
-            <span>Flagged for client</span>
-            {options.tags.length > 0 ? (
-              <select name="client" defaultValue={params.client || options.tags[0]} className={SELECT_CLASS} required>
-                {options.tags.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <Input name="client" placeholder="Client tag" required />
-            )}
-            <input type="hidden" name="sort" value="attention" />
-            <Button type="submit" size="sm" variant="outline">
-              Show
-            </Button>
-          </form>
-        </div>
+            <div className="flex flex-col gap-3 border-t border-rule/40 pt-4">
+              <h2 className="micro">Presets</h2>
+              <form action="/search" className="flex flex-col gap-2 text-sm">
+                <span>What&apos;s new in</span>
+                <select name="domain" defaultValue={params.domain || domainOptions[0]?.value} className={SELECT_CLASS} required>
+                  {domainOptions.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                <span>since</span>
+                <Input type="date" name="since" defaultValue={params.since || weekAgo} required />
+                <input type="hidden" name="sort" value="attention" />
+                <Button type="submit" size="sm" variant="outline">
+                  Show
+                </Button>
+              </form>
+              <form action="/search" className="flex flex-col gap-2 text-sm">
+                <span>Flagged for client</span>
+                {options.tags.length > 0 ? (
+                  <select name="client" defaultValue={params.client || options.tags[0]} className={SELECT_CLASS} required>
+                    {options.tags.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <Input name="client" placeholder="Client tag" required />
+                )}
+                <input type="hidden" name="sort" value="attention" />
+                <Button type="submit" size="sm" variant="outline">
+                  Show
+                </Button>
+              </form>
+            </div>
+          </div>
+        </details>
       </aside>
 
       <section className="flex min-w-0 flex-col gap-3">
@@ -411,7 +436,7 @@ async function SearchView({ searchParams }: { searchParams: Promise<RawParams> }
                 href={hrefWith(params, { sort })}
                 aria-current={params.sort === sort ? "page" : undefined}
                 className={cn(
-                  "glass-interactive rounded-full px-3 py-1 text-sm font-medium text-muted-foreground hover:text-foreground",
+                  "glass-interactive rounded-full px-3 py-1 text-sm font-medium text-muted-foreground hover:text-foreground touch:inline-flex touch:min-h-11 touch:items-center touch:px-4",
                   params.sort === sort && "bg-signal/15 text-foreground ring-1 ring-signal/50",
                 )}
               >
@@ -440,7 +465,7 @@ export default function SearchPage({ searchParams }: { searchParams: Promise<Raw
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-8">
       <header className="flex flex-col gap-1">
-        <Link href="/ask" className="micro w-fit hover:text-signal">
+        <Link href="/ask" className="micro w-fit hover:text-signal touch:inline-flex touch:min-h-11 touch:items-center">
           ← Back to Ask
         </Link>
         <p className="micro">Research-signal · Library</p>

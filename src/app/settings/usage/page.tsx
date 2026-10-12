@@ -35,6 +35,11 @@ type RunRow = {
   error: string | null;
 };
 
+// Wide tables scroll sideways inside their plate on phones; the first column stays pinned on an opaque plate.
+const STICKY_COL = "sticky left-0 z-10 bg-plate-solid";
+// Below lg the table's scroll container fades at the right edge to show that more columns scroll in.
+const TABLE_FADE = "max-lg:[&_[data-slot=table-container]]:[mask-image:linear-gradient(to_right,#000_calc(100%-2rem),transparent)]";
+
 const usd = (n: number) => `$${n.toFixed(n < 1 ? 4 : 2)}`;
 const mb = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 const when = (v: string | Date) => new Date(v).toISOString().replace("T", " ").slice(0, 16);
@@ -90,7 +95,7 @@ async function Usage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile label="LLM cost this week" value={usd(weekTotal)} />
         <StatTile
           label="LLM cost this month"
@@ -121,7 +126,7 @@ async function Usage() {
           <ConeChart title="LLM cost this week by stage" unit="USD" data={weekByStage} />
         </section>
 
-        <section className="plate flex flex-col gap-3 p-4">
+        <section className={`plate flex flex-col gap-3 p-4 ${TABLE_FADE}`}>
           <h2 className="micro">Cost by stage</h2>
           {costs.length === 0 ? (
             <p className="text-sm text-muted-foreground">No LLM calls this month.</p>
@@ -129,7 +134,7 @@ async function Usage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Stage</TableHead>
+                  <TableHead className={STICKY_COL}>Stage</TableHead>
                   <TableHead className="text-right">This week</TableHead>
                   <TableHead className="text-right">This month</TableHead>
                   <TableHead className="text-right">Calls this month</TableHead>
@@ -138,7 +143,7 @@ async function Usage() {
               <TableBody>
                 {costs.map((r) => (
                   <TableRow key={r.stage}>
-                    <TableCell className="font-mono">{r.stage}</TableCell>
+                    <TableCell className={`${STICKY_COL} font-mono`}>{r.stage}</TableCell>
                     <TableCell className="text-right tabular-nums">{usd(Number(r.week))}</TableCell>
                     <TableCell className="text-right tabular-nums">{usd(Number(r.month))}</TableCell>
                     <TableCell className="text-right tabular-nums">{Number(r.calls)}</TableCell>
@@ -150,7 +155,7 @@ async function Usage() {
         </section>
       </div>
 
-      <section className="plate flex flex-col gap-3 p-4">
+      <section className={`plate flex flex-col gap-3 p-4 ${TABLE_FADE}`}>
         <h2 className="micro">Source run history</h2>
         {runs.length === 0 ? (
           <p className="text-sm text-muted-foreground">No runs recorded yet.</p>
@@ -158,7 +163,7 @@ async function Usage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Started (UTC)</TableHead>
+                <TableHead className={STICKY_COL}>Started (UTC)</TableHead>
                 <TableHead>Source</TableHead>
                 <TableHead>Stage</TableHead>
                 <TableHead>Status</TableHead>
@@ -170,7 +175,7 @@ async function Usage() {
             <TableBody>
               {runs.map((r, i) => (
                 <TableRow key={`${String(r.started_at)}-${i}`}>
-                  <TableCell className="tabular-nums">{when(r.started_at)}</TableCell>
+                  <TableCell className={`${STICKY_COL} tabular-nums`}>{when(r.started_at)}</TableCell>
                   <TableCell className="font-mono">{r.source_kind ?? "—"}</TableCell>
                   <TableCell className="font-mono">{r.stage}</TableCell>
                   <TableCell>

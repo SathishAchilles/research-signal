@@ -30,7 +30,7 @@ export function CardActions({ paperId, initial }: { paperId: string; initial: Ac
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Your action">
+    <div className="flex flex-wrap items-center gap-1.5 touch:gap-2" role="group" aria-label="Your action">
       {BUTTONS.map((b) => (
         <button
           key={b.action}
@@ -38,14 +38,14 @@ export function CardActions({ paperId, initial }: { paperId: string; initial: Ac
           data-action={b.action}
           aria-pressed={current === b.action}
           onClick={() => choose(b.action)}
-          className="glass-chip glass-interactive px-2.5 py-0.5 text-xs font-medium aria-pressed:border-signal aria-pressed:bg-signal aria-pressed:text-[#03201D]"
+          className="glass-chip glass-interactive px-2.5 py-0.5 text-xs font-medium whitespace-nowrap touch:min-h-11 touch:flex-auto touch:px-4 touch:text-sm aria-pressed:border-signal aria-pressed:bg-signal aria-pressed:text-[#03201D]"
           title={`${b.label} (${b.key})`}
         >
           {current === b.action ? "✓ " : ""}
           {b.label}
         </button>
       ))}
-      {error ? <span className="text-xs text-destructive">Not saved</span> : null}
+      {error ? <span className="text-xs text-destructive touch:text-sm">Not saved</span> : null}
     </div>
   );
 }

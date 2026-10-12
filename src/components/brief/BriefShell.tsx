@@ -106,7 +106,7 @@ export function BriefShell({ children }: { children: ReactNode }) {
               className="fixed inset-0 z-50 flex items-center justify-center bg-black/55"
               onClick={() => setHelpOpen(false)}
             >
-              <div className="glass-elevated w-80 p-5" onClick={(e) => e.stopPropagation()}>
+              <div className="glass-elevated w-[min(20rem,calc(100vw-2rem))] p-5" onClick={(e) => e.stopPropagation()}>
                 <h2 className="micro mb-3">Keyboard shortcuts</h2>
                 <dl className="grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2 text-sm">
                   {KEYS.map(([key, label]) => (

@@ -23,7 +23,7 @@ function DomainBanner({ brief, domain, figures }: { brief: BriefDoc; domain: Dom
         height={270}
         sizes="(min-width: 1024px) 240px, 160px"
       />
-      <figcaption className="text-[11px] leading-4 text-muted-foreground">
+      <figcaption className="text-xs leading-4 text-muted-foreground lg:text-[11px]">
         {hero ? (
           <>
             <span className="line-clamp-1">{hero.title}</span>
@@ -61,7 +61,7 @@ export function DomainSection({
   ];
 
   return (
-    <section id={domain.slug} aria-labelledby={`${domain.slug}-heading`} className="flex scroll-mt-32 flex-col gap-3">
+    <section id={domain.slug} aria-labelledby={`${domain.slug}-heading`} className="flex scroll-mt-36 flex-col gap-3">
       <h2 id={`${domain.slug}-heading`} className="border-t border-rule pt-4 font-heading text-xl font-medium tracking-tight">
         {domain.name}
       </h2>
@@ -90,7 +90,7 @@ export function DomainSection({
               return (
                 <p key={id} className="text-sm text-muted-foreground">
                   In Top 3:{" "}
-                  <a href={`#card-${id}`} className="underline">
+                  <a href={`#card-${id}`} className="underline touch:inline-flex touch:min-h-11 touch:items-center">
                     {card.title}
                   </a>
                 </p>

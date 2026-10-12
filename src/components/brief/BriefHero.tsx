@@ -133,7 +133,7 @@ function StageFrame({ item }: { item: StageItem }) {
         />
       </span>
       <span aria-hidden className="ml-[24px] h-3 w-px bg-signal/60" />
-      <span className="plate ml-3 flex flex-col gap-1 p-2.5 text-xs transition-[border-color] duration-150 group-hover:border-signal group-data-[linked]:border-signal">
+      <span className="plate ml-3 flex flex-col gap-1 p-3 text-sm transition-[border-color] lg:p-2.5 lg:text-xs duration-150 group-hover:border-signal group-data-[linked]:border-signal">
         <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span className="micro rounded-full border border-chip-border px-2 py-px">
             #{rank} · {item.domainName}
@@ -142,7 +142,7 @@ function StageFrame({ item }: { item: StageItem }) {
             {VERDICT_LABEL[card.verdict]}
           </span>
         </span>
-        <span className={`text-foreground ${lead ? "line-clamp-2 text-sm" : "line-clamp-2"}`}>{item.headline || card.title}</span>
+        <span className={`text-foreground ${lead ? "line-clamp-3 text-[15px] lg:line-clamp-2 lg:text-sm" : "line-clamp-3 lg:line-clamp-2"}`}>{item.headline || card.title}</span>
         <span className="font-mono text-muted-foreground">
           {meterText(card.rung)} · {card.signalType}
           {rising != null && rising > 0 ? (
@@ -150,7 +150,7 @@ function StageFrame({ item }: { item: StageItem }) {
           ) : null}
         </span>
         {figure ? (
-          <span className="text-[11px] leading-4 text-muted-foreground">
+          <span className="text-xs leading-4 text-muted-foreground lg:text-[11px]">
             {lead && figure.caption ? <span className="line-clamp-1">{figure.caption}</span> : null}
             <span className="block">{figureAttribution(figure.authors, card.arxivId)}</span>
           </span>

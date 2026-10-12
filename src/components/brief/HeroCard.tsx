@@ -4,6 +4,7 @@ import { meterText } from "@/lib/brief/cues";
 import { formatCount } from "@/lib/brief/tokens";
 import type { ActionKind, BriefCard } from "@/lib/brief/types";
 import { AttentionLine, CardFrame, type CardProse, CueRow, MoreDetails } from "./CardParts";
+import { CARD_TOUCH } from "./StandardCard";
 
 // The paper's lead figure for the specimen card. BriefCard does not carry it, so the brief page passes
 // it in (structurally the BriefFigure from briefFigures() in lib/brief/load.ts; venue is optional and
@@ -39,7 +40,7 @@ export function HeroCard({
   ];
 
   return (
-    <CardFrame card={card} action={action} className="border-signal/40 p-5 pl-6">
+    <CardFrame card={card} action={action} className={`border-signal/40 p-4 pl-5 sm:p-5 sm:pl-6 ${CARD_TOUCH}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="micro">Hero{card.arxivId ? ` · arXiv ${card.arxivId}` : ""}</span>
         <span className="micro num">Score {card.final.toFixed(2)}</span>

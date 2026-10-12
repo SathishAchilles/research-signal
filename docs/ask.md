@@ -80,7 +80,43 @@ Titles, abstracts, notes, full text and every other string in a tool result are 
 
 ## Ask check (task 13.3)
 
-Run on 2026-10-13 against the local dev server (`next dev` on port 3104, which uses the shared production database), not against production. Each prompt was a new thread sent as `POST /api/ask` with a session cookie, and the stream was read to the end. Every answer was saved with no `coverage.warning`.
+### Production (2026-10-13)
+
+Run on 2026-10-13 against production, <https://research-signal.vercel.app/api/ask>. The run used the six suggested prompts exactly as `JOB_PROMPTS` in `src/components/ask/AskPanel.tsx` defines them, and sent them one after another. Each prompt opened a new thread and was sent as `POST /api/ask` with a session cookie created in the same process. The stream was read to the end. Every answer returned HTTP 200, had no stream error and no `coverage.warning`, and was saved.
+
+Columns:
+
+- **First text** is when the one-line preface arrives.
+- **First model text** is the first text delta written by the model.
+- **Citations** counts the refs in the `finish` metadata. Each count matches `ask_messages.citations` and the number of distinct `[pN]` refs in the saved content.
+- **Cost** is the sum of `llm_calls.cost_usd` over the rows whose `request_id` is the answer's message id. It equals `ask_messages.cost_usd` for every row.
+
+| Chip | Prompt | Intent | Confidence | Citations | First text | First model text | Total | Cost | LLM calls |
+|---|---|---|---|---|---|---|---|---|---|
+| Bet | Should a client bet on mixture-of-agents? | BET | Medium | 8 | 7.5 s | 13.0 s | 30.6 s | $0.0484 | 5 (incl. `ask_repair`) |
+| Backing | Does research back LLM-based visual quality inspection for a manufacturer? | BACKING | Medium | 12 | 4.2 s | 11.5 s | 20.3 s | $0.0353 | 4 |
+| Direction | Where is agent evaluation heading? | DIRECTION | Medium | 12 | 10.0 s | 16.6 s | 27.3 s | $0.0338 | 4 |
+| Explain | agentic RAG | EXPLAIN+CATCHUP | Medium | 9 | 5.7 s | 7.4 s | 15.5 s | $0.0172 | 3 |
+| Catch up | What's new in RAG since 1 Oct? | CATCHUP | Medium | 3 | 4.7 s | 11.8 s | 15.0 s | $0.0174 | 4 |
+| Prep | Prep me for Acme on vision quality inspection | PREP | Medium | 16 | 4.3 s | 10.2 s | 24.0 s | $0.0505 | 5 |
+
+The six together cost $0.2027, which is under the approved cap of $0.25.
+
+Coverage lines:
+
+- Five answers had "Searched 1470 indexed papers 2025-09-28 – 2026-10-12".
+- The Catch up answer had "Searched 1470 indexed papers 2025-09-28 – 2026-10-12 + live HF (10 found)". Its `search_index` call found fewer than 5 relevant hits, so `live_search` ran. It found 10 Hugging Face papers and inserted them with `source = 'live'`. With only 3 citations, this answer is the thinnest of the six, although it still graded Medium.
+
+Notes:
+
+- All six intents were exercised, including BACKING, which the earlier local run missed.
+- The Bet answer needed one `ask_repair` call, which is why it took the longest and cost the most per citation. None of the other five needed a repair.
+- Every answer graded Medium. None reached High, because High needs at least 5 cited papers at rung CODE or above, including at least 1 PEER.
+- "First text" ranges from 4.2 s to 10.0 s. That time covers routing plus the first search, which run before the preface is sent.
+
+### Earlier local run (2026-10-13)
+
+This earlier run used the local dev server (`next dev` on port 3104, which uses the shared production database). Each prompt was a new thread sent as `POST /api/ask` with a session cookie, and the stream was read to the end. Every answer was saved with no `coverage.warning`.
 
 Columns:
 
@@ -103,9 +139,4 @@ All six answers had the same coverage line: "Searched 1470 indexed papers 2025-0
 - The PREP answer needed one `ask_repair` call. That call was most of its higher cost.
 - "Is LLM code review production-ready?" took three model steps, with two tool rounds, and needed no repair.
 
-Open items:
-
-- The task asks for production. These runs are local and still have to be repeated against <https://research-signal.vercel.app>.
-- Two prompts in this run differ from the panel's suggested chips (`JOB_PROMPTS` in `src/components/ask/AskPanel.tsx`):
-  - The Backing chip is "Does research back LLM-based visual quality inspection for a manufacturer?". It was replaced by "Is LLM code review production-ready?", which routed to BET, so the BACKING intent was not exercised.
-  - The Direction chip is "Where is agent evaluation heading?". It was replaced by "Where is industrial computer vision heading?".
+This local run used two prompts that are not in `JOB_PROMPTS`: "Is LLM code review production-ready?" instead of the Backing chip, and "Where is industrial computer vision heading?" instead of the Direction chip. The production run above uses the six chips exactly as written.
